@@ -1,152 +1,259 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
 import Pagination from '../../components/common/Pagination.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
-import { formatVND, formatDateVN } from '../../data/mockData.js';
-import { Eye, Search, RotateCcw, Calendar, Check, XCircle } from 'lucide-react';
+import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import { formatVND, formatDateVN, formatDateTimeVN } from '../../data/mockData.js';
+import { Eye, Search, RotateCcw, Check, LogIn, LogOut } from 'lucide-react';
+
+// Giá trị status lấy đúng theo CHECK constraint của bảng dbo.bookings.
+const STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Chờ xử lý (PENDING)' },
+  { value: 'PAYMENT_PROCESSING', label: 'Đang thanh toán (PAYMENT_PROCESSING)' },
+  { value: 'CONFIRMED', label: 'Đã xác nhận (CONFIRMED)' },
+  { value: 'EXPIRED', label: 'Hết hạn (EXPIRED)' },
+  { value: 'CANCELLED', label: 'Đã hủy (CANCELLED)' },
+  { value: 'FAILED', label: 'Thất bại (FAILED)' },
+];
+
+// Cột UI → field sort mà backend chấp nhận.
+const SORT_FIELD_MAP = {
+  code: 'code',
+  checkin_date: 'checkInDate',
+  checkout_date: 'checkOutDate',
+  total_amount: 'totalAmount',
+  booking_status: 'status',
+  created_at: 'createdAt',
+};
 
 export default function BookingListPage() {
-  const { bookings, accommodations, updateBookingStatus } = useAdmin();
+  const {
+    bookings,
+    bookingsLoading,
+    bookingsError,
+    bookingsPagination,
+    fetchBookings,
+    approveBooking,
+    checkInBooking,
+    checkOutBooking,
+    showToast,
+    accommodations,
+    fetchAccommodations,
+  } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // URL query filter support
-  const initialStatus = searchParams.get('status') || '';
-  const initialView = searchParams.get('view') || '';
+  const statusFilter = (searchParams.get('status') || '').toUpperCase();
+  const stayStatus = searchParams.get('stayStatus') || '';
+  const isStayMode = stayStatus === 'checkin' || stayStatus === 'checkout';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [accommodationFilter, setAccommodationFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState(initialStatus);
-  const [paymentFilter, setPaymentFilter] = useState('');
-  const [checkinDateFilter, setCheckinDateFilter] = useState('');
-  const [checkoutDateFilter, setCheckoutDateFilter] = useState('');
 
-  // Table state
-  const [sortField, setSortField] = useState('created_at');
-  const [sortDirection, setSortDirection] = useState('desc');
+  // null = dùng sort mặc định theo chế độ (createdAt desc hoặc ngày nhận/trả asc).
+  const [sortField, setSortField] = useState(null);
+  const [sortDirection, setSortDirection] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [approvingId, setApprovingId] = useState(null);
+  const [stayAction, setStayAction] = useState(null);
+  const [stayOverrides, setStayOverrides] = useState({});
+  const [confirmAction, setConfirmAction] = useState(null);
 
+  const defaultSortField = stayStatus === 'checkin'
+    ? 'checkin_date'
+    : stayStatus === 'checkout'
+      ? 'checkout_date'
+      : 'created_at';
+  const defaultSortDirection = stayStatus ? 'asc' : 'desc';
+  const activeSortField = sortField || defaultSortField;
+  const activeSortDirection = sortDirection || defaultSortDirection;
+
+  const today = new Date();
+  const todayLabel = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
+  const updateStatusFilter = (value) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) {
+        next.set('status', value);
+      } else {
+        next.delete('status');
+      }
+      return next;
+    }, { replace: true });
+    setCurrentPage(1);
+  };
+
+  // Nạp danh sách cơ sở lưu trú cho bộ lọc (backend tự scope theo tài khoản).
   useEffect(() => {
-    if (initialStatus) {
-      setStatusFilter(initialStatus);
-    }
-    if (initialView === 'today') {
-      setCheckinDateFilter('2026-10-01');
-    }
-  }, [initialStatus, initialView]);
+    fetchAccommodations({ page: 1, limit: 100 }).catch(() => {});
+  }, [fetchAccommodations]);
+
+  // Debounce để không bắn request mỗi lần gõ phím.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchBookings({
+        page: currentPage,
+        limit: pageSize,
+        q: searchTerm,
+        status: statusFilter,
+        stayStatus,
+        accommodationId: accommodationFilter,
+        sortBy: SORT_FIELD_MAP[activeSortField],
+        sortDir: activeSortDirection,
+      }).catch(() => {});
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [
+    fetchBookings,
+    reloadKey,
+    currentPage,
+    pageSize,
+    searchTerm,
+    statusFilter,
+    stayStatus,
+    accommodationFilter,
+    activeSortField,
+    activeSortDirection,
+  ]);
 
   const handleReset = () => {
     setSearchTerm('');
     setAccommodationFilter('');
-    setStatusFilter('');
-    setPaymentFilter('');
-    setCheckinDateFilter('');
-    setCheckoutDateFilter('');
     setSearchParams({});
+    setSortField(null);
+    setSortDirection(null);
     setCurrentPage(1);
   };
-
-  const filteredData = useMemo(() => {
-    return bookings.filter((b) => {
-      const matchSearch =
-        !searchTerm ||
-        b.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.customer_phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.customer_email.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchAcc = !accommodationFilter || String(b.accommodation_id) === String(accommodationFilter);
-      const matchStatus = !statusFilter || b.booking_status === statusFilter;
-      const matchPayment = !paymentFilter || b.payment_status === paymentFilter;
-      const matchCheckin = !checkinDateFilter || b.checkin_date >= checkinDateFilter;
-      const matchCheckout = !checkoutDateFilter || b.checkout_date <= checkoutDateFilter;
-
-      return matchSearch && matchAcc && matchStatus && matchPayment && matchCheckin && matchCheckout;
-    }).sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [bookings, searchTerm, accommodationFilter, statusFilter, paymentFilter, checkinDateFilter, checkoutDateFilter, sortField, sortDirection]);
-
-  const totalItems = filteredData.length;
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, currentPage, pageSize]);
 
   const handleSort = (field, direction) => {
     setSortField(field);
     setSortDirection(direction);
+    setCurrentPage(1);
   };
 
-  const columns = [
-    {
-      header: 'Mã đơn',
-      accessor: 'code',
-      sortable: true,
-      render: (row) => (
-        <Link
-          to={`/admin/bookings/${row.id}`}
-          style={{ fontWeight: 600, color: '#292D32', textDecoration: 'underline' }}
-          className="code-badge"
-        >
-          {row.code}
-        </Link>
-      )
-    },
-    {
-      header: 'Khách hàng',
-      accessor: 'customer_name',
-      sortable: true,
-      render: (row) => (
-        <div>
-          <div style={{ fontWeight: 600 }}>{row.customer_name}</div>
-          <div style={{ fontSize: '11px', color: '#6B7280' }} className="tabular-nums">
-            {row.customer_phone}
-          </div>
+  const handleStayAction = async (bookingId, type) => {
+    setStayAction({ id: bookingId, type });
+    try {
+      const result = type === 'checkin'
+        ? await checkInBooking(bookingId)
+        : await checkOutBooking(bookingId);
+
+      // Cập nhật tại chỗ để dòng không biến mất ngay; chỉ rời danh sách khi bấm Làm mới.
+      setStayOverrides((prev) => ({
+        ...prev,
+        [bookingId]: {
+          checked_in_at: result.checkedInAt ?? prev[bookingId]?.checked_in_at ?? null,
+          checked_out_at: result.checkedOutAt ?? null,
+          operational_status: result.operationalStatus,
+        },
+      }));
+    } catch (error) {
+      if (error.status !== 401) {
+        showToast(`Không thực hiện được: ${error.message}`, 'error');
+      }
+    } finally {
+      setStayAction(null);
+    }
+  };
+
+  const handleConfirmStayAction = () => {
+    if (!confirmAction) {
+      return;
+    }
+
+    const { row, type } = confirmAction;
+    setConfirmAction(null);
+    handleStayAction(row.id, type);
+  };
+
+  const handleApprove = async (bookingId) => {
+    setApprovingId(bookingId);
+    try {
+      await approveBooking(bookingId);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      if (error.status !== 401) {
+        showToast(`Không duyệt được đơn: ${error.message}`, 'error');
+      }
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const codeColumn = {
+    header: 'Mã đơn',
+    accessor: 'code',
+    sortable: true,
+    render: (row) => (
+      <Link
+        to={`/admin/bookings/${row.id}`}
+        style={{ fontWeight: 600, color: '#292D32', textDecoration: 'underline' }}
+        className="code-badge"
+      >
+        {row.code}
+      </Link>
+    )
+  };
+
+  const customerColumn = {
+    header: 'Khách hàng',
+    accessor: 'customer_name',
+    render: (row) => (
+      <div>
+        <div style={{ fontWeight: 600 }}>{row.customer_name}</div>
+        <div style={{ fontSize: '11px', color: '#6B7280' }} className="tabular-nums">
+          {row.customer_phone}
         </div>
-      )
-    },
-    {
-      header: 'Cơ sở lưu trú & Loại phòng',
-      accessor: 'accommodation_name',
-      sortable: true,
-      render: (row) => (
-        <div>
-          <div style={{ fontWeight: 500, color: '#292D32' }}>{row.accommodation_name}</div>
-          <div style={{ fontSize: '11px', color: '#6B7280' }}>{row.room_type_name}</div>
-        </div>
-      )
-    },
-    {
-      header: 'Thời gian lưu trú',
-      accessor: 'checkin_date',
-      sortable: true,
-      render: (row) => (
-        <div className="tabular-nums" style={{ fontSize: '12px' }}>
-          <div><strong>Đến:</strong> {formatDateVN(row.checkin_date)}</div>
-          <div style={{ color: '#6B7280' }}><strong>Đi:</strong> {formatDateVN(row.checkout_date)} ({row.nights} đêm)</div>
-        </div>
-      )
-    },
-    {
-      header: 'Số lượng',
-      accessor: 'adults_count',
-      width: '95px',
-      render: (row) => (
-        <span className="tabular-nums" style={{ fontSize: '12px' }}>
-          {row.rooms_count} phòng · {row.adults_count} lớn {row.children_count > 0 ? `${row.children_count} nhỏ` : ''}
-        </span>
-      )
-    },
+      </div>
+    )
+  };
+
+  const accommodationColumn = {
+    header: 'Cơ sở lưu trú & Loại phòng',
+    accessor: 'accommodation_name',
+    render: (row) => (
+      <div>
+        <div style={{ fontWeight: 500, color: '#292D32' }}>{row.accommodation_name}</div>
+        <div style={{ fontSize: '11px', color: '#6B7280' }}>{row.room_type_name}</div>
+      </div>
+    )
+  };
+
+  const periodColumn = {
+    header: 'Kỳ lưu trú',
+    accessor: 'checkin_date',
+    sortable: true,
+    render: (row) => (
+      <div className="tabular-nums" style={{ fontSize: '12px' }}>
+        <div><strong>Nhận:</strong> {formatDateVN(row.checkin_date)}</div>
+        <div style={{ color: '#6B7280' }}><strong>Trả:</strong> {formatDateVN(row.checkout_date)} ({row.nights} đêm)</div>
+      </div>
+    )
+  };
+
+  const quantityColumn = {
+    header: 'Số lượng',
+    accessor: 'adults_count',
+    width: '95px',
+    render: (row) => (
+      <span className="tabular-nums" style={{ fontSize: '12px' }}>
+        {row.rooms_count} phòng · {row.adults_count} lớn {row.children_count > 0 ? `${row.children_count} nhỏ` : ''}
+      </span>
+    )
+  };
+
+  const genericColumns = [
+    codeColumn,
+    customerColumn,
+    accommodationColumn,
+    periodColumn,
+    quantityColumn,
     {
       header: 'Tổng tiền (VNĐ)',
       accessor: 'total_amount',
@@ -162,13 +269,14 @@ export default function BookingListPage() {
       header: 'Trạng thái',
       accessor: 'booking_status',
       sortable: true,
-      render: (row) => <StatusBadge status={row.booking_status} />
-    },
-    {
-      header: 'Thanh toán',
-      accessor: 'payment_status',
-      sortable: true,
-      render: (row) => <StatusBadge status={row.payment_status} />
+      render: (row) => {
+        const badgeStatus = row.operational_status === 'CHECKED_IN'
+          ? 'checked-in'
+          : row.operational_status === 'CHECKED_OUT'
+            ? 'checked-out'
+            : row.status;
+        return <StatusBadge status={badgeStatus} />;
+      }
     },
     {
       header: 'Ngày tạo',
@@ -194,13 +302,14 @@ export default function BookingListPage() {
           >
             <Eye size={13} />
           </Link>
-          {row.booking_status === 'Pending' && (
+          {row.status === 'PENDING' && (
             <button
               type="button"
               className="row-action-btn"
               style={{ color: '#287A4B', borderColor: '#BAE2C8' }}
               title="Xác nhận đặt phòng"
-              onClick={() => updateBookingStatus(row.id, 'Confirmed')}
+              disabled={approvingId === row.id}
+              onClick={() => handleApprove(row.id)}
             >
               <Check size={13} />
             </button>
@@ -210,49 +319,230 @@ export default function BookingListPage() {
     }
   ];
 
+  const checkinColumns = [
+    codeColumn,
+    customerColumn,
+    accommodationColumn,
+    periodColumn,
+    quantityColumn,
+    {
+      header: 'Yêu cầu đặc biệt',
+      accessor: 'special_requests',
+      width: '170px',
+      render: (row) => (
+        row.special_requests ? (
+          <div
+            style={{ fontSize: '11.5px', color: '#6B7280', maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            title={row.special_requests}
+          >
+            {row.special_requests}
+          </div>
+        ) : (
+          <span style={{ color: '#9CA3AF' }}>—</span>
+        )
+      )
+    },
+    {
+      header: 'Trạng thái',
+      accessor: 'operational_status',
+      render: (row) => (
+        row.checked_in_at
+          ? <span className="badge badge-info">Đã nhận phòng lúc {formatDateTimeVN(row.checked_in_at)}</span>
+          : <span className="badge badge-warning">Chờ nhận phòng</span>
+      )
+    },
+    {
+      header: 'Thao tác',
+      accessor: 'actions',
+      align: 'center',
+      width: '150px',
+      render: (row) => {
+        const isDone = Boolean(row.checked_in_at);
+        const isBusy = stayAction?.id === row.id && stayAction?.type === 'checkin';
+
+        return (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Link
+              to={`/admin/bookings/${row.id}`}
+              className="row-action-btn"
+              title="Xem chi tiết đơn"
+            >
+              <Eye size={13} />
+            </Link>
+            <button
+              type="button"
+              className={`btn btn-sm ${isDone ? 'btn-secondary' : 'btn-primary'}`}
+              disabled={isDone || isBusy}
+              onClick={() => setConfirmAction({ row, type: 'checkin' })}
+            >
+              <LogIn size={13} /> {isDone ? 'Đã xong' : isBusy ? 'Đang xử lý...' : 'Nhận phòng'}
+            </button>
+          </div>
+        );
+      }
+    }
+  ];
+
+  const checkoutColumns = [
+    codeColumn,
+    customerColumn,
+    accommodationColumn,
+    periodColumn,
+    {
+      header: 'Nhận thực tế',
+      accessor: 'checked_in_at',
+      render: (row) => (
+        <span className="tabular-nums" style={{ fontSize: '12px' }}>
+          {row.checked_in_at ? formatDateTimeVN(row.checked_in_at) : '—'}
+        </span>
+      )
+    },
+    quantityColumn,
+    {
+      header: 'Trạng thái',
+      accessor: 'operational_status',
+      render: (row) => (
+        row.checked_out_at
+          ? <span className="badge badge-info">Đã trả phòng lúc {formatDateTimeVN(row.checked_out_at)}</span>
+          : <span className="badge badge-success">Đang lưu trú</span>
+      )
+    },
+    {
+      header: 'Thao tác',
+      accessor: 'actions',
+      align: 'center',
+      width: '150px',
+      render: (row) => {
+        const isDone = Boolean(row.checked_out_at);
+        const isBusy = stayAction?.id === row.id && stayAction?.type === 'checkout';
+
+        return (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Link
+              to={`/admin/bookings/${row.id}`}
+              className="row-action-btn"
+              title="Xem chi tiết đơn"
+            >
+              <Eye size={13} />
+            </Link>
+            <button
+              type="button"
+              className={`btn btn-sm ${isDone ? 'btn-secondary' : 'btn-primary'}`}
+              disabled={isDone || isBusy}
+              onClick={() => setConfirmAction({ row, type: 'checkout' })}
+            >
+              <LogOut size={13} /> {isDone ? 'Đã xong' : isBusy ? 'Đang xử lý...' : 'Trả phòng'}
+            </button>
+          </div>
+        );
+      }
+    }
+  ];
+
+  const columns = isStayMode
+    ? (stayStatus === 'checkin' ? checkinColumns : checkoutColumns)
+    : genericColumns;
+
+  const tableData = isStayMode
+    ? bookings.map((row) => ({ ...row, ...(stayOverrides[row.id] || {}) }))
+    : bookings;
+
+  const pageTitle = stayStatus === 'checkin'
+    ? `Nhận phòng hôm nay (${todayLabel})`
+    : stayStatus === 'checkout'
+      ? `Trả phòng hôm nay (${todayLabel})`
+      : statusFilter === 'PENDING'
+        ? 'Đặt phòng chờ duyệt'
+        : 'Quản lý đặt phòng';
+
+  const pageDescription = stayStatus === 'checkin'
+    ? 'Danh sách khách đủ điều kiện nhận phòng hôm nay. Xác nhận khi khách đã đến nhận phòng.'
+    : stayStatus === 'checkout'
+      ? 'Danh sách khách đang lưu trú. Xác nhận khi khách hoàn tất trả phòng.'
+      : 'Lọc và xử lý danh sách đặt phòng, lịch trình khách đến, tổng thanh toán và quy trình duyệt phòng.';
+
+  const emptyMessage = stayStatus === 'checkin'
+    ? 'Hôm nay không có khách chờ nhận phòng.'
+    : stayStatus === 'checkout'
+      ? 'Hiện không có khách đang lưu trú để trả phòng.'
+      : 'Không tìm thấy đơn đặt phòng nào phù hợp với bộ lọc.';
+
+  const confirmMessage = confirmAction
+    ? `Đơn ${confirmAction.row.code} · ${confirmAction.row.customer_name} · ${confirmAction.row.accommodation_name} · ${formatDateVN(confirmAction.row.checkin_date)} → ${formatDateVN(confirmAction.row.checkout_date)}. Hệ thống sẽ ghi nhận thời điểm thực tế.`
+    : '';
+
   return (
     <div>
       <PageHeader
-        title={initialView === 'today' ? "Lượt nhận phòng & Trả phòng hôm nay" : "Quản lý đặt phòng"}
-        description="Lọc và xử lý danh sách đặt phòng, lịch trình khách đến, tổng thanh toán và quy trình duyệt phòng."
+        title={pageTitle}
+        description={pageDescription}
         breadcrumb={[
-          { label: 'Đặt phòng' }
+          { label: 'Đặt phòng' },
+          ...(isStayMode
+            ? [{ label: stayStatus === 'checkin' ? 'Nhận phòng' : 'Trả phòng' }]
+            : [])
         ]}
-        actions={
+        actions={isStayMode ? (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setStayOverrides({});
+              setReloadKey((key) => key + 1);
+            }}
+          >
+            <RotateCcw size={13} /> Làm mới
+          </button>
+        ) : (
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
               type="button"
-              className={`btn btn-sm ${statusFilter === 'Pending' ? 'btn-primary' : 'btn-secondary'}`}
+              className={`btn btn-sm ${statusFilter === 'PENDING' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => {
-                setStatusFilter('Pending');
-                setCurrentPage(1);
+                updateStatusFilter('PENDING');
               }}
             >
-              Chờ duyệt ({bookings.filter((b) => b.booking_status === 'Pending').length})
+              Chờ duyệt
             </button>
             <button
               type="button"
-              className={`btn btn-sm ${statusFilter === 'Confirmed' ? 'btn-primary' : 'btn-secondary'}`}
+              className={`btn btn-sm ${statusFilter === 'CONFIRMED' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => {
-                setStatusFilter('Confirmed');
-                setCurrentPage(1);
+                updateStatusFilter('CONFIRMED');
               }}
             >
               Đã xác nhận
             </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${statusFilter === 'Checked-in' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => {
-                setStatusFilter('Checked-in');
-                setCurrentPage(1);
-              }}
-            >
-              Đang lưu trú
-            </button>
           </div>
-        }
+        )}
       />
+
+      {bookingsError && (
+        <div
+          className="admin-card"
+          style={{
+            padding: '12px 16px',
+            marginBottom: '12px',
+            borderColor: '#F0C0C0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}
+        >
+          <span style={{ fontSize: '13px', color: '#B42318' }}>
+            Không tải được danh sách đặt phòng: {bookingsError.message}
+          </span>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setReloadKey((key) => key + 1)}
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
 
       {/* Filter Panel */}
       <div className="filter-panel">
@@ -275,91 +565,48 @@ export default function BookingListPage() {
           </div>
         </div>
 
-        <div className="filter-group">
-          <label className="filter-label" htmlFor="filter-booking-acc">Cơ sở lưu trú:</label>
-          <select
-            id="filter-booking-acc"
-            className="filter-select"
-            value={accommodationFilter}
-            onChange={(e) => {
-              setAccommodationFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">Tất cả cơ sở lưu trú</option>
-            {accommodations.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {(!isStayMode || accommodations.length > 1) && (
+          <div className="filter-group">
+            <label className="filter-label" htmlFor="filter-booking-acc">Cơ sở lưu trú:</label>
+            <select
+              id="filter-booking-acc"
+              className="filter-select"
+              value={accommodationFilter}
+              onChange={(e) => {
+                setAccommodationFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="">Tất cả cơ sở lưu trú</option>
+              {accommodations.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        <div className="filter-group">
-          <label className="filter-label" htmlFor="filter-booking-status">Trạng thái đặt phòng:</label>
-          <select
-            id="filter-booking-status"
-            className="filter-select"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">Tất cả trạng thái</option>
-            <option value="Confirmed">Đã xác nhận (Confirmed)</option>
-            <option value="Pending">Chờ xử lý (Pending)</option>
-            <option value="Checked-in">Đã nhận phòng (Checked-in)</option>
-            <option value="Checked-out">Đã trả phòng (Checked-out)</option>
-            <option value="Cancelled">Đã hủy (Cancelled)</option>
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label className="filter-label" htmlFor="filter-booking-pay">Thanh toán:</label>
-          <select
-            id="filter-booking-pay"
-            className="filter-select"
-            value={paymentFilter}
-            onChange={(e) => {
-              setPaymentFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="">Tất cả thanh toán</option>
-            <option value="Paid">Đã thanh toán (Paid)</option>
-            <option value="Unpaid">Chưa thanh toán (Unpaid)</option>
-            <option value="Refunded">Đã hoàn tiền (Refunded)</option>
-          </select>
-        </div>
-
-        <div className="filter-group">
-          <label className="filter-label" htmlFor="filter-from-checkin">Từ ngày nhận:</label>
-          <input
-            id="filter-from-checkin"
-            type="date"
-            className="filter-input"
-            value={checkinDateFilter}
-            onChange={(e) => {
-              setCheckinDateFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
-        </div>
-
-        <div className="filter-group">
-          <label className="filter-label" htmlFor="filter-to-checkout">Đến ngày trả:</label>
-          <input
-            id="filter-to-checkout"
-            type="date"
-            className="filter-input"
-            value={checkoutDateFilter}
-            onChange={(e) => {
-              setCheckoutDateFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-          />
-        </div>
+        {!isStayMode && (
+          <div className="filter-group">
+            <label className="filter-label" htmlFor="filter-booking-status">Trạng thái đặt phòng:</label>
+            <select
+              id="filter-booking-status"
+              className="filter-select"
+              value={statusFilter}
+              onChange={(e) => {
+                updateStatusFilter(e.target.value);
+              }}
+            >
+              <option value="">Tất cả trạng thái</option>
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="filter-actions">
           <button
@@ -375,23 +622,35 @@ export default function BookingListPage() {
       {/* Table */}
       <DataTable
         columns={columns}
-        data={paginatedData}
-        sortField={sortField}
-        sortDirection={sortDirection}
+        data={tableData}
+        loading={bookingsLoading}
+        skeletonRows={Math.min(pageSize, 5)}
+        sortField={activeSortField}
+        sortDirection={activeSortDirection}
         onSort={handleSort}
-        emptyMessage="Không tìm thấy đơn đặt phòng nào phù hợp với bộ lọc."
+        emptyMessage={emptyMessage}
       />
 
       {/* Pagination */}
       <Pagination
         currentPage={currentPage}
         pageSize={pageSize}
-        totalItems={totalItems}
+        totalItems={bookingsPagination.total}
         onPageChange={(page) => setCurrentPage(page)}
         onPageSizeChange={(size) => {
           setPageSize(size);
           setCurrentPage(1);
         }}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(confirmAction)}
+        title={confirmAction?.type === 'checkin' ? 'Xác nhận nhận phòng?' : 'Xác nhận trả phòng?'}
+        message={confirmMessage}
+        confirmLabel={confirmAction?.type === 'checkin' ? 'Nhận phòng' : 'Trả phòng'}
+        confirmVariant="primary"
+        onConfirm={handleConfirmStayAction}
+        onCancel={() => setConfirmAction(null)}
       />
     </div>
   );

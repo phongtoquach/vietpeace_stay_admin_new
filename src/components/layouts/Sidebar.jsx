@@ -47,7 +47,7 @@ export default function Sidebar() {
   });
 
   // Count pending bookings for the badge
-  const pendingCount = bookings.filter((b) => b.booking_status === 'Pending').length;
+  const pendingCount = bookings.filter((b) => b.status === 'PENDING').length;
 
   // Auto-expand parents when child route matches
   useEffect(() => {
@@ -153,22 +153,31 @@ export default function Sidebar() {
                   Tất cả đặt phòng
                 </NavLink>
                 <NavLink
-                  to="/admin/bookings?status=Pending"
+                  to="/admin/bookings?status=PENDING"
                   className={({ isActive }) =>
-                    `sidebar-sublink ${location.search.includes('status=Pending') ? 'active' : ''}`
+                    `sidebar-sublink ${location.search.includes('status=PENDING') ? 'active' : ''}`
                   }
                   onClick={closeMobile}
                 >
                   Đặt phòng chờ duyệt
                 </NavLink>
                 <NavLink
-                  to="/admin/bookings?view=today"
+                  to="/admin/bookings?stayStatus=checkin"
                   className={({ isActive }) =>
-                    `sidebar-sublink ${location.search.includes('view=today') ? 'active' : ''}`
+                    `sidebar-sublink ${location.search.includes('stayStatus=checkin') ? 'active' : ''}`
                   }
                   onClick={closeMobile}
                 >
-                  Nhận / Trả phòng
+                  Nhận phòng
+                </NavLink>
+                <NavLink
+                  to="/admin/bookings?stayStatus=checkout"
+                  className={({ isActive }) =>
+                    `sidebar-sublink ${location.search.includes('stayStatus=checkout') ? 'active' : ''}`
+                  }
+                  onClick={closeMobile}
+                >
+                  Trả phòng
                 </NavLink>
               </div>
             )}

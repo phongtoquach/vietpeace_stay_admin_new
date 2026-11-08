@@ -6,7 +6,10 @@ const STATUS_TRANSLATIONS = {
   'active': 'Đang hoạt động',
   'inactive': 'Ngừng hoạt động',
   'pending': 'Chờ xử lý',
+  'payment_processing': 'Đang thanh toán',
   'confirmed': 'Đã xác nhận',
+  'expired': 'Hết hạn',
+  'failed': 'Thất bại',
   'checked-in': 'Đã nhận phòng',
   'checked-out': 'Đã trả phòng',
   'cancelled': 'Đã hủy',
@@ -65,9 +68,9 @@ export default function StatusBadge({ status, type, label }) {
 
   if (['active', 'confirmed', 'paid', 'completed', 'available', 'đang hoạt động', 'đã xác nhận', 'đã thanh toán', 'hoàn thành'].includes(val)) {
     badgeClass = 'badge-success';
-  } else if (['pending', 'partial', 'partially paid', 'warning', 'in progress', 'chờ xử lý', 'thanh toán một phần'].includes(val)) {
+  } else if (['pending', 'partial', 'partially paid', 'warning', 'in progress', 'payment_processing', 'chờ xử lý', 'thanh toán một phần'].includes(val)) {
     badgeClass = 'badge-warning';
-  } else if (['cancelled', 'inactive', 'unpaid', 'danger', 'rejected', 'ngừng hoạt động', 'đã hủy', 'chưa thanh toán'].includes(val)) {
+  } else if (['cancelled', 'inactive', 'unpaid', 'danger', 'rejected', 'expired', 'failed', 'ngừng hoạt động', 'đã hủy', 'chưa thanh toán'].includes(val)) {
     badgeClass = 'badge-danger';
   } else if (['checked-in', 'checked-out', 'refunded', 'info', 'đã nhận phòng', 'đã trả phòng', 'đã hoàn tiền'].includes(val)) {
     badgeClass = 'badge-info';

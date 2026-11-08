@@ -7,11 +7,11 @@ import React, {
 } from 'react';
 
 import { accommodationsApi } from '../api/accommodations.js';
+import { bookingsApi } from '../api/bookings.js';
 
 
 import { useAuth } from './AuthContext.jsx';
 import {
-  INITIAL_BOOKINGS,
   INITIAL_ROOM_WEEKDAY_RATES,
   INITIAL_RATE_PERIODS,
   INITIAL_ROOM_RATES,
@@ -67,7 +67,16 @@ export function AdminProvider({ children }) {
   // module room type được nối backend (xem báo cáo các trang bị ảnh hưởng).
   const [roomTypes, setRoomTypes] = useState([]);
   const [roomWeekdayRates, setRoomWeekdayRates] = useState(INITIAL_ROOM_WEEKDAY_RATES);
-  const [bookings, setBookings] = useState(INITIAL_BOOKINGS);
+  // Booking list lấy từ API; state rỗng cho tới lần fetch đầu tiên.
+  const [bookings, setBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [bookingsError, setBookingsError] = useState(null);
+  const [bookingsPagination, setBookingsPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  });
   const [ratePeriods, setRatePeriods] = useState(INITIAL_RATE_PERIODS);
   const [roomRates, setRoomRates] = useState(INITIAL_ROOM_RATES);
   const [promotions, setPromotions] = useState(INITIAL_PROMOTIONS);
@@ -172,6 +181,54 @@ export function AdminProvider({ children }) {
       setAccommodationsLoading(false);
     }
   }, []);
+
+  const fetchBookings = useCallback(async (params = {}) => {
+    setBookingsLoading(true);
+    setBookingsError(null);
+
+    try {
+      const payload = await bookingsApi.getList(params);
+
+      setBookings(payload.data?.items || []);
+      setBookingsPagination(
+        payload.data?.pagination || {
+          page: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0
+        }
+      );
+      return payload;
+    } catch (error) {
+      console.error('[ERROR] fetchBookings thất bại:', {
+        message: error.message,
+        status: error.status,
+        errorCode: error.errorCode
+      });
+      setBookingsError(error);
+      throw error;
+    } finally {
+      setBookingsLoading(false);
+    }
+  }, []);
+
+  const approveBooking = async (id) => {
+    const result = await bookingsApi.approve(id);
+    showToast(`Đã duyệt đơn ${result.code}.`);
+    return result;
+  };
+
+  const checkInBooking = async (id) => {
+    const result = await bookingsApi.checkIn(id);
+    showToast(`Đã nhận phòng cho đơn ${result.code}.`);
+    return result;
+  };
+
+  const checkOutBooking = async (id) => {
+    const result = await bookingsApi.checkOut(id);
+    showToast(`Đã trả phòng cho đơn ${result.code}.`);
+    return result;
+  };
 
   // Auth functions
   const login = () => {
@@ -414,36 +471,6 @@ export function AdminProvider({ children }) {
       showToast("Lỗi kết nối khi xóa điểm tham quan.", "error");
       return { success: false };
     }
-  };
-
-  // Bookings CRUD
-  const updateBookingStatus = (id, newStatus) => {
-    setBookings((prev) =>
-      prev.map((b) => {
-        if (b.id === Number(id)) {
-          const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-          const historyEntry = {
-            status: newStatus,
-            timestamp,
-            note: `Status updated to ${newStatus} by admin`
-          };
-          return {
-            ...b,
-            booking_status: newStatus,
-            history: [...(b.history || []), historyEntry]
-          };
-        }
-        return b;
-      })
-    );
-    showToast(`Booking status updated to ${newStatus}.`);
-  };
-
-  const updatePaymentStatus = (id, newPaymentStatus) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === Number(id) ? { ...b, payment_status: newPaymentStatus } : b))
-    );
-    showToast(`Payment status updated to ${newPaymentStatus}.`);
   };
 
   // Promotions CRUD
@@ -810,10 +837,15 @@ export function AdminProvider({ children }) {
         updateAttraction,
         toggleAttractionStatus,
         deleteAttraction,
-        // Phần Sidebar đang cần ba giá trị này
+        // Phần Sidebar đang cần bookings từ API
         bookings,
-        updateBookingStatus,
-        updatePaymentStatus,
+        bookingsLoading,
+        bookingsError,
+        bookingsPagination,
+        fetchBookings,
+        approveBooking,
+        checkInBooking,
+        checkOutBooking,
         ratePeriods,
         addRatePeriod,
         updateRatePeriod,

@@ -1,50 +1,173 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
 import { formatVND, formatDateVN, formatDateTimeVN } from '../../data/mockData.js';
+import { bookingsApi } from '../../api/bookings.js';
 import {
   ArrowLeft,
-  Calendar,
   User,
-  CreditCard,
   Building,
-  CheckCircle,
+  Printer,
   Clock,
-  AlertCircle,
-  Phone,
-  Mail,
-  Printer
+  Check,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 
 export default function BookingDetailPage() {
   const { id } = useParams();
-  const { bookings, updateBookingStatus, updatePaymentStatus } = useAdmin();
+  const { approveBooking, checkInBooking, checkOutBooking, showToast } = useAdmin();
 
-  const booking = bookings.find((b) => b.id === Number(id));
+  const [booking, setBooking] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [approving, setApproving] = useState(false);
+  const [stayLoading, setStayLoading] = useState(false);
 
-  if (!booking) {
+  useEffect(() => {
+    let cancelled = false;
+
+    bookingsApi.getDetail(id)
+      .then((payload) => {
+        if (!cancelled) {
+          setBooking(payload.data);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err);
+          setBooking(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, reloadKey]);
+
+  if (loading) {
     return (
-      <div style={{ padding: '30px', textAlign: 'center' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 700 }}>Không tìm thấy đơn đặt phòng</h2>
-        <p style={{ color: '#6B7280', margin: '8px 0 16px' }}>Đơn đặt phòng mã #{id} không tồn tại hoặc đã bị xóa.</p>
-        <Link to="/admin/bookings" className="btn btn-secondary">
-          <ArrowLeft size={14} /> Quay lại danh sách đặt phòng
-        </Link>
+      <div className="admin-card" style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>
+        Đang tải chi tiết đặt phòng...
       </div>
     );
+  }
+
+  if (error) {
+    const isNotFound = error.status === 404;
+
+    return (
+      <div style={{ padding: '30px', textAlign: 'center' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 700 }}>
+          {isNotFound ? 'Không tìm thấy đơn đặt phòng' : 'Không tải được đơn đặt phòng'}
+        </h2>
+        <p style={{ color: '#6B7280', margin: '8px 0 16px' }}>
+          {isNotFound
+            ? `Đơn đặt phòng #${id} không tồn tại hoặc bạn không có quyền xem.`
+            : error.message}
+        </p>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+          {!isNotFound && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setBooking(null);
+                setError(null);
+                setLoading(true);
+                setReloadKey((key) => key + 1);
+              }}
+            >
+              Thử lại
+            </button>
+          )}
+          <Link to="/admin/bookings" className="btn btn-secondary">
+            <ArrowLeft size={14} /> Quay lại danh sách đặt phòng
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!booking) {
+    return null;
   }
 
   const handlePrint = () => {
     window.print();
   };
 
+  const handleApprove = async () => {
+    setApproving(true);
+    try {
+      await approveBooking(booking.id);
+      setBooking(null);
+      setError(null);
+      setLoading(true);
+      setReloadKey((key) => key + 1);
+    } catch (err) {
+      if (err.status !== 401) {
+        showToast(`Không duyệt được đơn: ${err.message}`, 'error');
+      }
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const reloadDetail = () => {
+    setBooking(null);
+    setError(null);
+    setLoading(true);
+    setReloadKey((key) => key + 1);
+  };
+
+  const handleCheckIn = async () => {
+    setStayLoading(true);
+    try {
+      await checkInBooking(booking.id);
+      reloadDetail();
+    } catch (err) {
+      if (err.status !== 401) {
+        showToast(`Không nhận phòng được: ${err.message}`, 'error');
+      }
+    } finally {
+      setStayLoading(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    setStayLoading(true);
+    try {
+      await checkOutBooking(booking.id);
+      reloadDetail();
+    } catch (err) {
+      if (err.status !== 401) {
+        showToast(`Không trả phòng được: ${err.message}`, 'error');
+      }
+    } finally {
+      setStayLoading(false);
+    }
+  };
+
+  const badgeStatus = booking.operational_status === 'CHECKED_IN'
+    ? 'checked-in'
+    : booking.operational_status === 'CHECKED_OUT'
+      ? 'checked-out'
+      : booking.status;
+
   return (
     <div>
       <PageHeader
         title={`Đơn đặt phòng: ${booking.code}`}
-        description={`Khởi tạo ngày ${formatDateTimeVN(booking.created_at)} · Trạng thái: ${booking.booking_status}`}
+        description={`Khởi tạo ngày ${booking.created_at ? formatDateTimeVN(booking.created_at) : '—'}`}
         breadcrumb={[
           { label: 'Đặt phòng', path: '/admin/bookings' },
           { label: booking.code }
@@ -54,36 +177,39 @@ export default function BookingDetailPage() {
             <Link to="/admin/bookings" className="btn btn-secondary">
               <ArrowLeft size={14} /> Danh sách
             </Link>
+            {booking.status === 'PENDING' && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={approving}
+                onClick={handleApprove}
+              >
+                <Check size={14} /> {approving ? 'Đang duyệt...' : 'Xác nhận đặt phòng'}
+              </button>
+            )}
+            {booking.status === 'CONFIRMED' && !booking.checked_in_at && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={stayLoading}
+                onClick={handleCheckIn}
+              >
+                <LogIn size={14} /> {stayLoading ? 'Đang xử lý...' : 'Xác nhận nhận phòng'}
+              </button>
+            )}
+            {booking.checked_in_at && !booking.checked_out_at && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={stayLoading}
+                onClick={handleCheckOut}
+              >
+                <LogOut size={14} /> {stayLoading ? 'Đang xử lý...' : 'Hoàn tất trả phòng'}
+              </button>
+            )}
             <button type="button" onClick={handlePrint} className="btn btn-secondary">
               <Printer size={14} /> In phiếu đặt phòng
             </button>
-            {booking.booking_status === 'Pending' && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => updateBookingStatus(booking.id, 'Confirmed')}
-              >
-                Xác nhận đặt phòng
-              </button>
-            )}
-            {booking.booking_status === 'Confirmed' && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => updateBookingStatus(booking.id, 'Checked-in')}
-              >
-                Xác nhận nhận phòng
-              </button>
-            )}
-            {booking.booking_status === 'Checked-in' && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => updateBookingStatus(booking.id, 'Checked-out')}
-              >
-                Hoàn tất trả phòng
-              </button>
-            )}
           </div>
         }
       />
@@ -102,33 +228,7 @@ export default function BookingDetailPage() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '12px', color: '#6B7280' }}>Trạng thái đặt phòng:</span>
-          <StatusBadge status={booking.booking_status} />
-          <span style={{ fontSize: '12px', color: '#6B7280', marginLeft: '12px' }}>Trạng thái thanh toán:</span>
-          <StatusBadge status={booking.payment_status} />
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', color: '#6B7280' }}>Cập nhật nhanh:</span>
-          <select
-            className="filter-select"
-            value={booking.booking_status}
-            onChange={(e) => updateBookingStatus(booking.id, e.target.value)}
-          >
-            <option value="Pending">Chờ xử lý (Pending)</option>
-            <option value="Confirmed">Đã xác nhận (Confirmed)</option>
-            <option value="Checked-in">Đã nhận phòng (Checked-in)</option>
-            <option value="Checked-out">Đã trả phòng (Checked-out)</option>
-            <option value="Cancelled">Đã hủy (Cancelled)</option>
-          </select>
-          <select
-            className="filter-select"
-            value={booking.payment_status}
-            onChange={(e) => updatePaymentStatus(booking.id, e.target.value)}
-          >
-            <option value="Paid">Đã thanh toán (Paid)</option>
-            <option value="Unpaid">Chưa thanh toán (Unpaid)</option>
-            <option value="Refunded">Đã hoàn tiền (Refunded)</option>
-          </select>
+          <StatusBadge status={badgeStatus} />
         </div>
       </div>
 
@@ -174,18 +274,54 @@ export default function BookingDetailPage() {
                       <strong>{booking.accommodation_name}</strong>
                     </div>
                     <div>
-                      <span style={{ color: '#6B7280' }}>Loại phòng: </span>
-                      <span>{booking.room_type_name}</span>
+                      <span style={{ color: '#6B7280' }}>Địa chỉ: </span>
+                      <span>{booking.accommodation_address || '—'}</span>
                     </div>
                     <div>
-                      <span style={{ color: '#6B7280' }}>Quy mô đoàn: </span>
+                      <span style={{ color: '#6B7280' }}>Liên hệ: </span>
                       <span className="tabular-nums">
-                        {booking.rooms_count} phòng · {booking.adults_count} người lớn
-                        {booking.children_count > 0 && `, ${booking.children_count} trẻ em`}
+                        {booking.accommodation_phone || '—'}
+                        {booking.accommodation_email ? ` · ${booking.accommodation_email}` : ''}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: '#6B7280' }}>Giờ nhận/trả phòng: </span>
+                      <span className="tabular-nums">
+                        {booking.accommodation_check_in_time || '—'} / {booking.accommodation_check_out_time || '—'}
                       </span>
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Stay summary */}
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '10px 14px',
+                  backgroundColor: '#FAFBFD',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '4px',
+                  fontSize: '12.5px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '18px'
+                }}
+                className="tabular-nums"
+              >
+                <span>
+                  <strong>Nhận phòng:</strong> {formatDateVN(booking.checkin_date)}
+                </span>
+                <span>
+                  <strong>Trả phòng:</strong> {formatDateVN(booking.checkout_date)}
+                </span>
+                <span>
+                  <strong>Thời gian:</strong> {booking.nights} đêm
+                </span>
+                <span>
+                  <strong>Quy mô:</strong> {booking.rooms_count} phòng · {booking.adults_count} người lớn
+                  {booking.children_count > 0 && `, ${booking.children_count} trẻ em`}
+                </span>
               </div>
 
               {/* Special Requests */}
@@ -200,66 +336,105 @@ export default function BookingDetailPage() {
           {/* Pricing Calculation Breakdown */}
           <div className="admin-card">
             <div className="admin-card-header">
-              <div className="admin-card-title">Chi tiết tính giá & Hóa đơn (VNĐ)</div>
-              <span className="badge badge-neutral">Đã bao gồm VAT</span>
+              <div className="admin-card-title">Chi tiết phòng & Hóa đơn (VNĐ)</div>
+              <span className="badge badge-neutral">{booking.currency}</span>
             </div>
             <div className="table-responsive" style={{ border: 'none' }}>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Khoản mục</th>
-                    <th style={{ textAlign: 'center' }}>Số lượng / Số đêm</th>
-                    <th style={{ textAlign: 'right' }}>Đơn giá</th>
+                    <th>Loại phòng</th>
+                    <th style={{ textAlign: 'center' }}>Số khách</th>
+                    <th style={{ textAlign: 'right' }}>Đơn giá / đêm</th>
                     <th style={{ textAlign: 'right' }}>Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody>
+                  {booking.items.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{item.room_type_name}</div>
+                        {item.discount_amount > 0 && (
+                          <div style={{ fontSize: '11px', color: '#287A4B' }}>
+                            Giảm giá loại phòng: -{formatVND(item.discount_amount)}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center' }} className="tabular-nums">
+                        {item.adults} lớn{item.children > 0 ? ` · ${item.children} nhỏ` : ''}
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="tabular-nums">
+                        {formatVND(item.base_price)}
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">
+                        {formatVND(item.room_subtotal)}
+                      </td>
+                    </tr>
+                  ))}
+
                   <tr>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{booking.room_type_name}</div>
-                      <div style={{ fontSize: '11px', color: '#6B7280' }}>
-                        Từ {formatDateVN(booking.checkin_date)} đến {formatDateVN(booking.checkout_date)} ({booking.nights} đêm)
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'center' }} className="tabular-nums">
-                      {booking.nights}
+                    <td colSpan={3} style={{ textAlign: 'right', color: '#6B7280', fontSize: '12px' }}>
+                      Tổng tiền phòng ({booking.nights} đêm)
                     </td>
                     <td style={{ textAlign: 'right' }} className="tabular-nums">
-                      {formatVND(booking.room_price)}
-                    </td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">
-                      {formatVND(booking.room_price * booking.nights)}
+                      {formatVND(booking.rooms_subtotal)}
                     </td>
                   </tr>
 
-                  {booking.extra_charges > 0 && (
+                  {booking.extra_guest_total > 0 && (
                     <tr>
-                      <td>Phụ phí người phát sinh / Giường phụ</td>
-                      <td style={{ textAlign: 'center' }}>1</td>
-                      <td style={{ textAlign: 'right' }} className="tabular-nums">{formatVND(booking.extra_charges)}</td>
-                      <td style={{ textAlign: 'right' }} className="tabular-nums">{formatVND(booking.extra_charges)}</td>
+                      <td colSpan={3} style={{ textAlign: 'right', color: '#6B7280', fontSize: '12px' }}>
+                        Phụ thu khách phát sinh
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="tabular-nums">
+                        {formatVND(booking.extra_guest_total)}
+                      </td>
+                    </tr>
+                  )}
+
+                  {booking.room_discount_total > 0 && (
+                    <tr style={{ color: '#287A4B' }}>
+                      <td colSpan={3} style={{ textAlign: 'right', fontSize: '12px' }}>
+                        Giảm giá loại phòng
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">
+                        - {formatVND(booking.room_discount_total)}
+                      </td>
                     </tr>
                   )}
 
                   {booking.discount_amount > 0 && (
                     <tr style={{ color: '#287A4B' }}>
-                      <td>Khuyến mãi áp dụng</td>
-                      <td style={{ textAlign: 'center' }}>—</td>
-                      <td style={{ textAlign: 'right' }}>—</td>
+                      <td colSpan={3} style={{ textAlign: 'right', fontSize: '12px' }}>
+                        Khuyến mãi áp dụng
+                      </td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">
                         - {formatVND(booking.discount_amount)}
                       </td>
                     </tr>
                   )}
 
-                  <tr>
-                    <td colSpan={3} style={{ textAlign: 'right', color: '#6B7280', fontSize: '12px' }}>
-                      Thuế & Phí dịch vụ (VAT 8% & Phí phục vụ 5%)
-                    </td>
-                    <td style={{ textAlign: 'right' }} className="tabular-nums">
-                      {formatVND(booking.tax_amount)}
-                    </td>
-                  </tr>
+                  {booking.tax_amount > 0 && (
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'right', color: '#6B7280', fontSize: '12px' }}>
+                        Thuế
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="tabular-nums">
+                        {formatVND(booking.tax_amount)}
+                      </td>
+                    </tr>
+                  )}
+
+                  {booking.service_fee > 0 && (
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'right', color: '#6B7280', fontSize: '12px' }}>
+                        Phí dịch vụ
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="tabular-nums">
+                        {formatVND(booking.service_fee)}
+                      </td>
+                    </tr>
+                  )}
 
                   <tr style={{ backgroundColor: '#FAFBFD', fontSize: '15px' }}>
                     <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700 }}>
@@ -275,72 +450,62 @@ export default function BookingDetailPage() {
           </div>
         </div>
 
-        {/* Right Column: Status Timeline & Payment Info */}
+        {/* Right Column: Lifecycle */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Payment Info Card */}
           <div className="admin-card">
             <div className="admin-card-header">
-              <div className="admin-card-title">Quyết toán thanh toán</div>
-              <StatusBadge status={booking.payment_status} />
+              <div className="admin-card-title">Mốc thời gian đặt phòng</div>
+              <Clock size={15} color="#6B7280" />
             </div>
-            <div className="admin-card-body" style={{ fontSize: '13px' }}>
-              <div style={{ marginBottom: '10px' }}>
-                <span style={{ color: '#6B7280', fontSize: '11.5px', textTransform: 'uppercase', fontWeight: 600 }}>
-                  Phương thức thanh toán
-                </span>
-                <div style={{ fontWeight: 600, marginTop: '2px', color: '#292D32' }}>
-                  {booking.payment_method || 'Chuyển khoản VietQR'}
+            <div className="admin-card-body" style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <div style={{ color: '#6B7280', fontSize: '11.5px', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Tạo đơn
+                </div>
+                <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
+                  {booking.created_at ? formatDateTimeVN(booking.created_at) : '—'}
                 </div>
               </div>
 
               <div>
-                <span style={{ color: '#6B7280', fontSize: '11.5px', textTransform: 'uppercase', fontWeight: 600 }}>
-                  Số tiền đã thu
-                </span>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: '#287A4B', marginTop: '2px' }} className="tabular-nums">
-                  {booking.payment_status === 'Paid' ? formatVND(booking.total_amount) : '0 VNĐ'}
+                <div style={{ color: '#6B7280', fontSize: '11.5px', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Xác nhận
+                </div>
+                <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
+                  {booking.confirmed_at ? formatDateTimeVN(booking.confirmed_at) : '—'}
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Status Timeline History */}
-          <div className="admin-card">
-            <div className="admin-card-header">
-              <div className="admin-card-title">Tiến trình lịch sử đặt phòng</div>
-            </div>
-            <div className="admin-card-body">
-              <div style={{ position: 'relative', paddingLeft: '16px', borderLeft: '2px solid #E5E7EB', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {(booking.history || []).map((step, idx) => (
-                  <div key={idx} style={{ position: 'relative' }}>
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: '-23px',
-                        top: '2px',
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        backgroundColor: '#F4C542',
-                        border: '2px solid #FFFFFF'
-                      }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, fontSize: '13px', color: '#292D32' }}>
-                        <StatusBadge status={step.status} />
-                      </span>
-                      <span style={{ fontSize: '11px', color: '#6B7280' }} className="tabular-nums">
-                        {step.timestamp.substring(11, 16)}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#6B7280', marginTop: '2px' }}>
-                      {step.note}
-                    </div>
-                    <div style={{ fontSize: '10.5px', color: '#9CA3AF' }} className="tabular-nums">
-                      {formatDateVN(step.timestamp)}
-                    </div>
+              <div>
+                <div style={{ color: '#6B7280', fontSize: '11.5px', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Nhận phòng thực tế
+                </div>
+                <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
+                  {booking.checked_in_at ? formatDateTimeVN(booking.checked_in_at) : '—'}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ color: '#6B7280', fontSize: '11.5px', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Trả phòng thực tế
+                </div>
+                <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
+                  {booking.checked_out_at ? formatDateTimeVN(booking.checked_out_at) : '—'}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ color: '#6B7280', fontSize: '11.5px', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Hủy đơn
+                </div>
+                <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
+                  {booking.cancelled_at ? formatDateTimeVN(booking.cancelled_at) : '—'}
+                </div>
+                {booking.cancellation_reason && (
+                  <div style={{ fontSize: '11.5px', color: '#6B7280', marginTop: '2px' }}>
+                    Lý do: {booking.cancellation_reason}
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>

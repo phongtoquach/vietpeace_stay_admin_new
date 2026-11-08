@@ -1,6 +1,5 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
 import {
@@ -8,12 +7,8 @@ import {
   SimpleBarChart,
   DoughnutChart
 } from '../../components/common/Charts.jsx';
-import {
-  formatVND,
-  formatDateVN,
-  MONTHLY_REVENUE_DATA,
-  BOOKING_STATUS_STATS
-} from '../../data/mockData.js';
+import { formatVND, formatDateVN } from '../../data/mockData.js';
+import { dashboardApi } from '../../api/dashboard.js';
 import {
   CalendarCheck,
   Clock,
@@ -28,34 +23,118 @@ import {
   ArrowRight
 } from 'lucide-react';
 
+const PAYMENT_STATUS_LABEL = {
+  PENDING: 'Chờ thanh toán',
+  PROCESSING: 'Đang xử lý',
+  SUCCESS: 'Đã thanh toán',
+  FAILED: 'Thất bại',
+  CANCELLED: 'Đã hủy',
+  REFUND_PENDING: 'Chờ hoàn tiền',
+  REFUND_PROCESSING: 'Đang hoàn tiền',
+  REFUNDED: 'Đã hoàn tiền',
+  PARTIALLY_REFUNDED: 'Hoàn tiền một phần'
+};
+
+const EMPTY_STATS = {
+  totalBookings: 0,
+  pendingBookings: 0,
+  checkinsToday: 0,
+  checkoutsToday: 0,
+  totalCustomers: 0,
+  monthlyRevenue: 0,
+  occupiedRooms: 0,
+  totalRooms: 0,
+  availableRooms: 0
+};
+
+const STATUS_META = {
+  PENDING: { label: 'Chờ xử lý', color: '#A66A00' },
+  PAYMENT_PROCESSING: { label: 'Đang thanh toán', color: '#1E6091' },
+  CONFIRMED: { label: 'Đã xác nhận', color: '#287A4B' },
+  EXPIRED: { label: 'Hết hạn', color: '#9CA3AF' },
+  CANCELLED: { label: 'Đã hủy', color: '#C0392B' },
+  FAILED: { label: 'Thất bại', color: '#7F1D1D' }
+};
+
 export default function DashboardPage() {
-  const { bookings, accommodations, customers } = useAdmin();
+  const [summary, setSummary] = useState(null);
+  const [charts, setCharts] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  // Calculate live summary stats from context
-  const totalBookingsCount = bookings.length;
-  const pendingBookingsCount = bookings.filter((b) => b.booking_status === 'Pending').length;
-  const checkinsTodayCount = bookings.filter((b) => b.booking_status === 'Checked-in' || b.checkin_date === '2026-10-01').length;
-  const checkoutsTodayCount = bookings.filter((b) => b.checkout_date === '2026-10-01').length;
-  const totalCustomersCount = customers.length;
-  const monthlyRevenue = bookings
-    .filter((b) => b.payment_status === 'Paid')
-    .reduce((acc, cur) => acc + cur.total_amount, 0);
+  useEffect(() => {
+    let cancelled = false;
 
-  // Room status estimation across active properties
-  const totalRoomsEstimate = 120;
-  const occupiedRoomsEstimate = 88;
-  const availableRoomsEstimate = totalRoomsEstimate - occupiedRoomsEstimate;
+    Promise.all([dashboardApi.getSummary(), dashboardApi.getCharts()])
+      .then(([summaryData, chartsData]) => {
+        if (!cancelled) {
+          setSummary(summaryData);
+          setCharts(chartsData);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
 
-  const recentBookings = [...bookings].reverse().slice(0, 5);
-  const upcomingCheckins = bookings.filter(
-    (b) => b.booking_status === 'Confirmed' || b.booking_status === 'Checked-in'
-  ).slice(0, 4);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const handleRetry = () => {
+    setLoading(true);
+    setError(null);
+    setReloadKey((key) => key + 1);
+  };
+
+  const stats = summary?.stats || EMPTY_STATS;
+  const recentBookings = summary?.recentBookings || [];
+  const upcomingCheckins = summary?.upcomingCheckins || [];
+  const occupancyRate = stats.totalRooms > 0
+    ? ((stats.occupiedRooms / stats.totalRooms) * 100).toFixed(1)
+    : '0.0';
+
+  const monthLabels = Array.from({ length: 12 }, (_, index) => `Thg ${index + 1}`);
+  const revenueChartData = charts
+    ? monthLabels.map((label, index) => ({ month: label, revenue: charts.monthlyRevenue[index] || 0 }))
+    : [];
+  const volumeChartData = charts
+    ? monthLabels.map((label, index) => ({ month: label, bookings: charts.monthlyBookings[index] || 0 }))
+    : [];
+  const occupancyChartData = charts
+    ? monthLabels.map((label, index) => ({ month: label, occupancy: charts.monthlyOccupancy[index] || 0 }))
+    : [];
+
+  const statusTotal = (charts?.statusDistribution || [])
+    .reduce((acc, item) => acc + item.count, 0);
+  const statusChartData = (charts?.statusDistribution || [])
+    .filter((item) => item.count > 0)
+    .map((item) => ({
+      status: STATUS_META[item.status]?.label || item.status,
+      count: item.count,
+      percentage: statusTotal > 0 ? Math.round((item.count / statusTotal) * 100) : 0,
+      color: STATUS_META[item.status]?.color || '#9CA3AF'
+    }));
+
+  const hasRevenueData = Boolean(charts?.monthlyRevenue.some((value) => value > 0));
+  const hasVolumeData = Boolean(charts?.monthlyBookings.some((value) => value > 0));
+  const hasOccupancyData = Boolean(charts?.monthlyOccupancy.some((value) => value > 0));
+
+  const displayValue = (value) => (loading ? '…' : value);
 
   return (
     <div>
       <PageHeader
         title="Tổng quan hoạt động lưu trú"
-        description="Thống kê công suất phòng, hiệu suất doanh thu và giám sát lượt khách đến trên toàn hệ thống VietPeace Stay."
+        description="Thống kê công suất phòng, hiệu suất doanh thu và giám sát lượt khách đến theo phạm vi bạn quản lý."
         breadcrumb={[
           { label: 'Tổng quan' }
         ]}
@@ -71,13 +150,36 @@ export default function DashboardPage() {
         }
       />
 
+      {error && (
+        <div
+          className="admin-card"
+          style={{
+            padding: '12px 16px',
+            marginBottom: '12px',
+            borderColor: '#F0C0C0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}
+        >
+          <span style={{ fontSize: '13px', color: '#B42318' }}>
+            Không tải được dữ liệu tổng quan: {error.message}
+          </span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleRetry}>
+            Thử lại
+          </button>
+        </div>
+      )}
+
       {/* Summary Stat Cards Grid */}
       <div className="stat-cards-grid">
         <div className="stat-card">
           <div className="stat-card-left">
             <span className="stat-card-title">Tổng đơn đặt phòng</span>
-            <span className="stat-card-value tabular-nums">{totalBookingsCount}</span>
-            <span className="stat-card-sub">Đơn đặt phòng toàn hệ thống</span>
+            <span className="stat-card-value tabular-nums">{displayValue(stats.totalBookings)}</span>
+            <span className="stat-card-sub">Đơn trong phạm vi quản lý</span>
           </div>
           <div className="stat-card-icon">
             <CalendarCheck size={20} />
@@ -87,7 +189,7 @@ export default function DashboardPage() {
         <div className="stat-card">
           <div className="stat-card-left">
             <span className="stat-card-title">Nhận phòng hôm nay</span>
-            <span className="stat-card-value tabular-nums">{checkinsTodayCount}</span>
+            <span className="stat-card-value tabular-nums">{displayValue(stats.checkinsToday)}</span>
             <span className="stat-card-sub" style={{ color: '#287A4B' }}>Lượt khách dự kiến đến</span>
           </div>
           <div className="stat-card-icon" style={{ backgroundColor: '#EAF5EE', borderColor: '#BAE2C8', color: '#287A4B' }}>
@@ -98,7 +200,7 @@ export default function DashboardPage() {
         <div className="stat-card">
           <div className="stat-card-left">
             <span className="stat-card-title">Trả phòng hôm nay</span>
-            <span className="stat-card-value tabular-nums">{checkoutsTodayCount}</span>
+            <span className="stat-card-value tabular-nums">{displayValue(stats.checkoutsToday)}</span>
             <span className="stat-card-sub">Lượt khách trả phòng</span>
           </div>
           <div className="stat-card-icon" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E6091' }}>
@@ -109,7 +211,7 @@ export default function DashboardPage() {
         <div className="stat-card">
           <div className="stat-card-left">
             <span className="stat-card-title">Đặt phòng chờ duyệt</span>
-            <span className="stat-card-value tabular-nums" style={{ color: '#A66A00' }}>{pendingBookingsCount}</span>
+            <span className="stat-card-value tabular-nums" style={{ color: '#A66A00' }}>{displayValue(stats.pendingBookings)}</span>
             <span className="stat-card-sub">Chờ xác nhận từ lễ tân</span>
           </div>
           <div className="stat-card-icon" style={{ backgroundColor: '#FEF8E7', borderColor: '#F8DF9E', color: '#A66A00' }}>
@@ -120,8 +222,8 @@ export default function DashboardPage() {
         <div className="stat-card">
           <div className="stat-card-left">
             <span className="stat-card-title">Tổng khách hàng</span>
-            <span className="stat-card-value tabular-nums">{totalCustomersCount}</span>
-            <span className="stat-card-sub">Hồ sơ khách đã đăng ký</span>
+            <span className="stat-card-value tabular-nums">{displayValue(stats.totalCustomers)}</span>
+            <span className="stat-card-sub">Khách đã đặt phòng</span>
           </div>
           <div className="stat-card-icon">
             <Users size={20} />
@@ -132,7 +234,7 @@ export default function DashboardPage() {
           <div className="stat-card-left">
             <span className="stat-card-title">Doanh thu tháng (VNĐ)</span>
             <span className="stat-card-value tabular-nums" style={{ fontSize: '16.5px' }}>
-              {formatVND(monthlyRevenue)}
+              {loading ? '…' : formatVND(stats.monthlyRevenue)}
             </span>
             <span className="stat-card-sub">Doanh thu thực thu kỳ này</span>
           </div>
@@ -144,8 +246,8 @@ export default function DashboardPage() {
         <div className="stat-card">
           <div className="stat-card-left">
             <span className="stat-card-title">Phòng đang có khách</span>
-            <span className="stat-card-value tabular-nums">{occupiedRoomsEstimate}</span>
-            <span className="stat-card-sub">73.3% công suất toàn chuỗi</span>
+            <span className="stat-card-value tabular-nums">{displayValue(stats.occupiedRooms)}</span>
+            <span className="stat-card-sub">{occupancyRate}% công suất</span>
           </div>
           <div className="stat-card-icon" style={{ backgroundColor: '#FEF8E7', borderColor: '#F8DF9E', color: '#A66A00' }}>
             <BedDouble size={20} />
@@ -155,8 +257,8 @@ export default function DashboardPage() {
         <div className="stat-card">
           <div className="stat-card-left">
             <span className="stat-card-title">Phòng còn trống</span>
-            <span className="stat-card-value tabular-nums">{availableRoomsEstimate}</span>
-            <span className="stat-card-sub">Sẵn sàng nhận khách</span>
+            <span className="stat-card-value tabular-nums">{displayValue(stats.availableRooms)}</span>
+            <span className="stat-card-sub">Trên tổng {displayValue(stats.totalRooms)} phòng</span>
           </div>
           <div className="stat-card-icon" style={{ backgroundColor: '#EAF5EE', borderColor: '#BAE2C8', color: '#287A4B' }}>
             <CheckCircle2 size={20} />
@@ -170,10 +272,14 @@ export default function DashboardPage() {
         <div className="admin-card">
           <div className="admin-card-header">
             <div className="admin-card-title">Hiệu suất doanh thu hàng tháng (VNĐ)</div>
-            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Thg 1 – Thg 9 2026</span>
+            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Thg 1 – Thg 12 {charts?.year || ''}</span>
           </div>
           <div className="admin-card-body">
-            <RevenueLineChart data={MONTHLY_REVENUE_DATA} />
+            {loading ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#6B7280' }}>Đang tải dữ liệu...</div>
+            ) : (
+              <RevenueLineChart data={hasRevenueData ? revenueChartData : []} />
+            )}
           </div>
         </div>
 
@@ -181,10 +287,16 @@ export default function DashboardPage() {
         <div className="admin-card">
           <div className="admin-card-header">
             <div className="admin-card-title">Phân bổ trạng thái đặt phòng</div>
-            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Toàn bộ cơ sở lưu trú</span>
+            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Trong phạm vi quản lý</span>
           </div>
           <div className="admin-card-body">
-            <DoughnutChart data={BOOKING_STATUS_STATS} />
+            {loading ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#6B7280' }}>Đang tải dữ liệu...</div>
+            ) : statusChartData.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#6B7280' }}>Chưa có dữ liệu trạng thái.</div>
+            ) : (
+              <DoughnutChart data={statusChartData} />
+            )}
           </div>
         </div>
       </div>
@@ -194,20 +306,28 @@ export default function DashboardPage() {
         <div className="admin-card">
           <div className="admin-card-header">
             <div className="admin-card-title">Khối lượng đặt phòng hàng tháng</div>
-            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Số đơn đã hoàn tất</span>
+            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Số đơn theo tháng</span>
           </div>
           <div className="admin-card-body">
-            <SimpleBarChart data={MONTHLY_REVENUE_DATA} valueKey="bookings" unit=" đơn" color="#F4C542" />
+            {loading ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#6B7280' }}>Đang tải dữ liệu...</div>
+            ) : (
+              <SimpleBarChart data={hasVolumeData ? volumeChartData : []} valueKey="bookings" unit=" đơn" color="#F4C542" />
+            )}
           </div>
         </div>
 
         <div className="admin-card">
           <div className="admin-card-header">
             <div className="admin-card-title">Tỷ lệ công suất phòng bình quân (%)</div>
-            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Tỷ lệ lấp đầy toàn chuỗi</span>
+            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Tỷ lệ lấp đầy</span>
           </div>
           <div className="admin-card-body">
-            <SimpleBarChart data={MONTHLY_REVENUE_DATA} valueKey="occupancy" unit="%" color="#60A5FA" />
+            {loading ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#6B7280' }}>Đang tải dữ liệu...</div>
+            ) : (
+              <SimpleBarChart data={hasOccupancyData ? occupancyChartData : []} valueKey="occupancy" unit="%" color="#60A5FA" />
+            )}
           </div>
         </div>
       </div>
@@ -237,7 +357,21 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentBookings.map((b) => (
+                {loading && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '24px 16px', textAlign: 'center', color: '#6B7280' }}>
+                      Đang tải dữ liệu...
+                    </td>
+                  </tr>
+                )}
+                {!loading && recentBookings.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '24px 16px', textAlign: 'center', color: '#6B7280' }}>
+                      Chưa có đơn đặt phòng nào.
+                    </td>
+                  </tr>
+                )}
+                {!loading && recentBookings.map((b) => (
                   <tr key={b.id}>
                     <td>
                       <Link
@@ -249,27 +383,25 @@ export default function DashboardPage() {
                       </Link>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 500 }}>{b.customer_name}</div>
-                      <div style={{ fontSize: '11px', color: '#6B7280' }}>{b.customer_phone}</div>
+                      <div style={{ fontWeight: 500 }}>{b.customerName}</div>
                     </td>
                     <td style={{ maxWidth: '170px' }}>
-                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={b.accommodation_name}>
-                        {b.accommodation_name}
+                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={b.accommodationName}>
+                        {b.accommodationName}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#6B7280' }}>{b.room_type_name}</div>
                     </td>
                     <td className="tabular-nums" style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-                      {formatDateVN(b.checkin_date)} <br />
-                      <span style={{ color: '#6B7280' }}>đến {formatDateVN(b.checkout_date)}</span>
+                      {formatDateVN(b.checkInDate)} <br />
+                      <span style={{ color: '#6B7280' }}>đến {formatDateVN(b.checkOutDate)}</span>
                     </td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">
-                      {formatVND(b.total_amount)}
+                      {formatVND(b.totalAmount)}
                     </td>
                     <td>
-                      <StatusBadge status={b.booking_status} />
+                      <StatusBadge status={b.status} />
                     </td>
-                    <td>
-                      <StatusBadge status={b.payment_status} />
+                    <td style={{ fontSize: '12px', color: '#6B7280' }}>
+                      {PAYMENT_STATUS_LABEL[b.paymentStatus] || '—'}
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <Link
@@ -295,7 +427,19 @@ export default function DashboardPage() {
             <span className="badge badge-info">Lễ tân</span>
           </div>
           <div style={{ padding: '12px 16px' }}>
-            {upcomingCheckins.map((item) => (
+            {loading && (
+              <div style={{ padding: '16px 0', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
+                Đang tải dữ liệu...
+              </div>
+            )}
+
+            {!loading && upcomingCheckins.length === 0 && (
+              <div style={{ padding: '16px 0', textAlign: 'center', color: '#6B7280', fontSize: '13px' }}>
+                Chưa có khách sắp nhận phòng.
+              </div>
+            )}
+
+            {!loading && upcomingCheckins.map((item) => (
               <div
                 key={item.id}
                 style={{
@@ -309,21 +453,21 @@ export default function DashboardPage() {
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '13px', color: '#292D32' }}>
-                    {item.customer_name}
+                    {item.customerName}
                   </div>
                   <div style={{ fontSize: '11.5px', color: '#6B7280', marginTop: '2px' }}>
-                    {item.accommodation_name}
+                    {item.accommodationName}
                   </div>
                   <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '1px' }}>
-                    {item.room_type_name} · {item.adults_count} người lớn
+                    {item.roomTypeNames.join(', ') || '—'} · {item.adultsCount} người lớn
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '12px', fontWeight: 600, color: '#287A4B' }} className="tabular-nums">
-                    {formatDateVN(item.checkin_date)}
+                    {formatDateVN(item.checkInDate)}
                   </div>
                   <span style={{ marginTop: '4px', display: 'inline-block' }}>
-                    <StatusBadge status={item.booking_status} />
+                    <StatusBadge status="confirmed" />
                   </span>
                 </div>
               </div>
@@ -331,11 +475,11 @@ export default function DashboardPage() {
 
             <div style={{ marginTop: '14px', textAlign: 'center' }}>
               <Link
-                to="/admin/bookings?view=today"
+                to="/admin/bookings?stayStatus=checkin"
                 className="btn btn-secondary btn-sm"
                 style={{ width: '100%' }}
               >
-                Mở danh sách lễ tân trong ngày
+                Mở danh sách nhận phòng
               </Link>
             </div>
           </div>
