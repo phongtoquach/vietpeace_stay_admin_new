@@ -11,12 +11,14 @@ import { Eye, Search, RotateCcw, Check, LogIn, LogOut } from 'lucide-react';
 
 // Giá trị status lấy đúng theo CHECK constraint của bảng dbo.bookings.
 const STATUS_OPTIONS = [
-  { value: 'PENDING', label: 'Chờ xử lý (PENDING)' },
-  { value: 'PAYMENT_PROCESSING', label: 'Đang thanh toán (PAYMENT_PROCESSING)' },
-  { value: 'CONFIRMED', label: 'Đã xác nhận (CONFIRMED)' },
-  { value: 'EXPIRED', label: 'Hết hạn (EXPIRED)' },
-  { value: 'CANCELLED', label: 'Đã hủy (CANCELLED)' },
-  { value: 'FAILED', label: 'Thất bại (FAILED)' },
+  { value: 'PENDING', label: 'Chờ xử lý' },
+  { value: 'PAYMENT_PROCESSING', label: 'Đang thanh toán' },
+  { value: 'CONFIRMED', label: 'Đã xác nhận' },
+  { value: 'EXPIRED', label: 'Hết hạn' },
+  { value: 'CANCELLED', label: 'Đã hủy' },
+  { value: 'FAILED', label: 'Thất bại' },
+  { value: 'checkedin', label: 'Đã nhận phòng' },
+  { value: 'checkedout', label: 'Đã trả phòng' },
 ];
 
 // Cột UI → field sort mà backend chấp nhận.
@@ -48,6 +50,7 @@ export default function BookingListPage() {
   const statusFilter = (searchParams.get('status') || '').toUpperCase();
   const stayStatus = searchParams.get('stayStatus') || '';
   const isStayMode = stayStatus === 'checkin' || stayStatus === 'checkout';
+  const isStayFilter = stayStatus === 'checkedin' || stayStatus === 'checkedout';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [accommodationFilter, setAccommodationFilter] = useState('');
@@ -68,7 +71,7 @@ export default function BookingListPage() {
     : stayStatus === 'checkout'
       ? 'checkout_date'
       : 'created_at';
-  const defaultSortDirection = stayStatus ? 'asc' : 'desc';
+  const defaultSortDirection = isStayMode ? 'asc' : 'desc';
   const activeSortField = sortField || defaultSortField;
   const activeSortDirection = sortDirection || defaultSortDirection;
 
@@ -78,10 +81,12 @@ export default function BookingListPage() {
   const updateStatusFilter = (value) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (value) {
+      next.delete('status');
+      next.delete('stayStatus');
+      if (value === 'checkin' || value === 'checkout' || value === 'checkedin' || value === 'checkedout') {
+        next.set('stayStatus', value);
+      } else if (value) {
         next.set('status', value);
-      } else {
-        next.delete('status');
       }
       return next;
     }, { replace: true });
@@ -220,6 +225,7 @@ export default function BookingListPage() {
     render: (row) => (
       <div>
         <div style={{ fontWeight: 500, color: '#292D32' }}>{row.accommodation_name}</div>
+        <div style={{ fontSize: '11px', color: '#6B7280' }}>Manager: {row.manager_name || 'Chưa phân công'}</div>
         <div style={{ fontSize: '11px', color: '#6B7280' }}>{row.room_type_name}</div>
       </div>
     )
@@ -243,7 +249,7 @@ export default function BookingListPage() {
     width: '95px',
     render: (row) => (
       <span className="tabular-nums" style={{ fontSize: '12px' }}>
-        {row.rooms_count} phòng · {row.adults_count} lớn {row.children_count > 0 ? `${row.children_count} nhỏ` : ''}
+        {row.rooms_count} phòng · {row.adults_count} người lớn {row.children_count > 0 ? `${row.children_count} trẻ nhỏ` : ''}
       </span>
     )
   };
@@ -270,10 +276,16 @@ export default function BookingListPage() {
       accessor: 'booking_status',
       sortable: true,
       render: (row) => {
-        const badgeStatus = row.operational_status === 'CHECKED_IN'
-          ? 'checked-in'
-          : row.operational_status === 'CHECKED_OUT'
+        const badgeStatus = isStayFilter
+          ? stayStatus === 'checkedout'
             ? 'checked-out'
+            : 'checked-in'
+          : isStayMode
+            ? row.operational_status === 'CHECKED_IN'
+              ? 'checked-in'
+              : row.operational_status === 'CHECKED_OUT'
+                ? 'checked-out'
+                : row.status
             : row.status;
         return <StatusBadge status={badgeStatus} />;
       }
@@ -587,26 +599,24 @@ export default function BookingListPage() {
           </div>
         )}
 
-        {!isStayMode && (
-          <div className="filter-group">
-            <label className="filter-label" htmlFor="filter-booking-status">Trạng thái đặt phòng:</label>
-            <select
-              id="filter-booking-status"
-              className="filter-select"
-              value={statusFilter}
-              onChange={(e) => {
-                updateStatusFilter(e.target.value);
-              }}
-            >
-              <option value="">Tất cả trạng thái</option>
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="filter-booking-status">Trạng thái đặt phòng:</label>
+          <select
+            id="filter-booking-status"
+            className="filter-select"
+            value={stayStatus || statusFilter}
+            onChange={(e) => {
+              updateStatusFilter(e.target.value);
+            }}
+          >
+            <option value="">Tất cả trạng thái</option>
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="filter-actions">
           <button

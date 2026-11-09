@@ -274,6 +274,10 @@ export default function BookingDetailPage() {
                       <strong>{booking.accommodation_name}</strong>
                     </div>
                     <div>
+                      <span style={{ color: '#6B7280' }}>Manager phụ trách: </span>
+                      <strong>{booking.accommodation_manager_name || 'Chưa phân công'}</strong>
+                    </div>
+                    <div>
                       <span style={{ color: '#6B7280' }}>Địa chỉ: </span>
                       <span>{booking.accommodation_address || '—'}</span>
                     </div>
@@ -320,7 +324,7 @@ export default function BookingDetailPage() {
                 </span>
                 <span>
                   <strong>Quy mô:</strong> {booking.rooms_count} phòng · {booking.adults_count} người lớn
-                  {booking.children_count > 0 && `, ${booking.children_count} trẻ em`}
+                  {booking.children_count > 0 && `, ${booking.children_count} trẻ nhỏ`}
                 </span>
               </div>
 
@@ -361,7 +365,7 @@ export default function BookingDetailPage() {
                         )}
                       </td>
                       <td style={{ textAlign: 'center' }} className="tabular-nums">
-                        {item.adults} lớn{item.children > 0 ? ` · ${item.children} nhỏ` : ''}
+                        {item.adults} người lớn{item.children > 0 ? ` · ${item.children} trẻ nhỏ` : ''}
                       </td>
                       <td style={{ textAlign: 'right' }} className="tabular-nums">
                         {formatVND(item.base_price)}
@@ -481,7 +485,9 @@ export default function BookingDetailPage() {
                   Nhận phòng thực tế
                 </div>
                 <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
-                  {booking.checked_in_at ? formatDateTimeVN(booking.checked_in_at) : '—'}
+                  {booking.checked_in_at
+                    ? `${formatDateTimeVN(booking.checked_in_at)} · ${booking.checked_in_by_name || 'Không xác định'}`
+                    : '—'}
                 </div>
               </div>
 
@@ -490,7 +496,9 @@ export default function BookingDetailPage() {
                   Trả phòng thực tế
                 </div>
                 <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
-                  {booking.checked_out_at ? formatDateTimeVN(booking.checked_out_at) : '—'}
+                  {booking.checked_out_at
+                    ? `${formatDateTimeVN(booking.checked_out_at)} · ${booking.checked_out_by_name || 'Không xác định'}`
+                    : '—'}
                 </div>
               </div>
 
