@@ -56,6 +56,7 @@ import ManagersListPage from './pages/users/ManagersListPage.jsx';
 
 // Reports
 import RevenueReportPage from './pages/reports/RevenueReportPage.jsx';
+import PropertyRevenueReportPage from './pages/reports/PropertyRevenueReportPage.jsx';
 import BookingReportPage from './pages/reports/BookingReportPage.jsx';
 import OccupancyReportPage from './pages/reports/OccupancyReportPage.jsx';
 
@@ -66,6 +67,15 @@ import WebsiteSettingsPage from './pages/settings/WebsiteSettingsPage.jsx';
 function AdminOnlyRoute({ children }) {
 	const { currentLoggedInUser } = useAuth();
 	if (currentLoggedInUser && currentLoggedInUser.role !== 'ADMIN') {
+		return <Navigate to="/admin/dashboard" replace />;
+	}
+	return children;
+}
+
+function PermissionRoute({ permission, children }) {
+	const { currentLoggedInUser, hasPermission } = useAuth();
+	const isAdmin = currentLoggedInUser?.role === 'ADMIN';
+	if (!isAdmin && !hasPermission(permission)) {
 		return <Navigate to="/admin/dashboard" replace />;
 	}
 	return children;
@@ -133,9 +143,10 @@ export default function App() {
 						<Route path="managers" element={<AdminOnlyRoute><ManagersListPage /></AdminOnlyRoute>} />
 
 						{/* Reports */}
-						<Route path="reports/revenue" element={<RevenueReportPage />} />
-						<Route path="reports/bookings" element={<BookingReportPage />} />
-						<Route path="reports/occupancy" element={<OccupancyReportPage />} />
+						<Route path="reports/revenue" element={<PermissionRoute permission="reports.view"><RevenueReportPage /></PermissionRoute>} />
+						<Route path="reports/revenue/properties/:id" element={<PermissionRoute permission="reports.view"><PropertyRevenueReportPage /></PermissionRoute>} />
+						<Route path="reports/bookings" element={<PermissionRoute permission="reports.view"><BookingReportPage /></PermissionRoute>} />
+						<Route path="reports/occupancy" element={<PermissionRoute permission="reports.view"><OccupancyReportPage /></PermissionRoute>} />
 
 						{/* Settings (Chỉ Super Admin) */}
 						<Route path="settings/general" element={<AdminOnlyRoute><GeneralSettingsPage /></AdminOnlyRoute>} />

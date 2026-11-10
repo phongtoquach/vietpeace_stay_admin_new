@@ -278,7 +278,7 @@ export default function DashboardPage() {
             {loading ? (
               <div style={{ padding: '16px', textAlign: 'center', color: '#6B7280' }}>Đang tải dữ liệu...</div>
             ) : (
-              <RevenueLineChart data={hasRevenueData ? revenueChartData : []} />
+              <RevenueLineChart data={hasRevenueData ? revenueChartData : []} year={charts?.year} />
             )}
           </div>
         </div>

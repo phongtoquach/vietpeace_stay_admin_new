@@ -25,7 +25,7 @@ const MONTH_LABELS = {
 };
 
 // SVG Line Chart for Monthly Revenue
-export function RevenueLineChart({ data = [] }) {
+export function RevenueLineChart({ data = [], year = new Date().getFullYear() }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
 
   if (data.length === 0) return <div style={{ color: '#6B7280', padding: '16px', textAlign: 'center' }}>Không có dữ liệu</div>;
@@ -142,7 +142,7 @@ export function RevenueLineChart({ data = [] }) {
             boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
           }}
         >
-          <strong>{MONTH_LABELS[data[hoveredIndex].month] || data[hoveredIndex].month} 2026:</strong>{' '}
+          <strong>{MONTH_LABELS[data[hoveredIndex].month] || data[hoveredIndex].month} {year}:</strong>{' '}
           <span className="tabular-nums">{formatVND(data[hoveredIndex].revenue)}</span>
         </div>
       )}

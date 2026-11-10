@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
@@ -18,7 +18,13 @@ import {
 
 export default function BookingDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
   const { approveBooking, checkInBooking, checkOutBooking, showToast } = useAdmin();
+  const fromReport = typeof location.state?.from === 'string'
+    && location.state.from.startsWith('/admin/')
+    ? location.state.from
+    : null;
+  const backTo = fromReport || '/admin/bookings';
 
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -89,8 +95,8 @@ export default function BookingDetailPage() {
               Thử lại
             </button>
           )}
-          <Link to="/admin/bookings" className="btn btn-secondary">
-            <ArrowLeft size={14} /> Quay lại danh sách đặt phòng
+          <Link to={backTo} className="btn btn-secondary">
+            <ArrowLeft size={14} /> Quay lại
           </Link>
         </div>
       </div>
@@ -174,8 +180,8 @@ export default function BookingDetailPage() {
         ]}
         actions={
           <div style={{ display: 'flex', gap: '8px' }}>
-            <Link to="/admin/bookings" className="btn btn-secondary">
-              <ArrowLeft size={14} /> Danh sách
+            <Link to={backTo} className="btn btn-secondary">
+              <ArrowLeft size={14} /> {fromReport ? 'Quay lại' : 'Danh sách'}
             </Link>
             {booking.status === 'PENDING' && (
               <button
