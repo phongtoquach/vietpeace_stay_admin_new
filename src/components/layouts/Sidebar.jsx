@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   Hotel,
+  Inbox,
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -120,6 +121,16 @@ export default function Sidebar() {
         >
           <LayoutDashboard size={16} className="sidebar-icon" />
           <span>Tổng quan</span>
+        </NavLink>
+
+        {/* Hỗ trợ khách (ticket từ chatbot) */}
+        <NavLink
+          to="/admin/chatbot"
+          className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          onClick={closeMobile}
+        >
+          <Inbox size={16} className="sidebar-icon" />
+          <span>Hỗ trợ khách</span>
         </NavLink>
 
         {/* Bookings Parent */}
