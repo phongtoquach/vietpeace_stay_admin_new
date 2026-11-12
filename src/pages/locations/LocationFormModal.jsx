@@ -33,6 +33,8 @@ export default function LocationFormModal({
     code: '',
     parent_location_id: '',
     description: '',
+    search_keywords: '',
+    is_featured: false,
     status: 'Active',
     image: ''
   });
@@ -93,6 +95,8 @@ export default function LocationFormModal({
         code: locationToEdit.code || locationToEdit.slug || '',
         parent_location_id: locationToEdit.parent_location_id ?? '',
         description: locationToEdit.description || locationToEdit.short_description || '',
+        search_keywords: locationToEdit.search_keywords ?? '',
+        is_featured: locationToEdit.is_featured === true || locationToEdit.is_featured === 1,
         status: locationToEdit.status || (locationToEdit.is_active ? 'Active' : 'Inactive'),
         image: existingImg
       });
@@ -108,6 +112,8 @@ export default function LocationFormModal({
         code: '',
         parent_location_id: targetParentId,
         description: '',
+        search_keywords: '',
+        is_featured: false,
         status: 'Active',
         image: ''
       });
@@ -119,6 +125,8 @@ export default function LocationFormModal({
         code: '',
         parent_location_id: '',
         description: '',
+        search_keywords: '',
+        is_featured: false,
         status: 'Active',
         image: ''
       });
@@ -178,6 +186,12 @@ export default function LocationFormModal({
       return;
     }
 
+    const searchKeywords = formData.search_keywords.trim();
+    if (searchKeywords.length > 500) {
+      setError('Từ khóa tìm kiếm tối đa 500 ký tự.');
+      return;
+    }
+
     setError('');
 
     const parentId = formData.parent_location_id ? Number(formData.parent_location_id) : null;
@@ -189,6 +203,7 @@ export default function LocationFormModal({
 
     const payload = {
       ...formData,
+      search_keywords: searchKeywords || null,
       parent_location_id: parentId,
       province_id: provId
     };
@@ -245,6 +260,14 @@ export default function LocationFormModal({
                 required
               />
 
+              <FormInput
+                label="Từ khóa tìm kiếm"
+                value={formData.search_keywords}
+                onChange={(e) => setFormData({ ...formData, search_keywords: e.target.value })}
+                placeholder="Ví dụ: Sài Gòn, SG, TPHCM"
+                maxLength={500}
+              />
+
               {/* Ô chọn duy nhất: Điểm đến cha (Cấp tỉnh / thành phố) */}
               <FormSelect
                 label="Điểm đến cha (Cấp tỉnh / thành phố)"
@@ -268,6 +291,15 @@ export default function LocationFormModal({
                   { value: 'Inactive', label: 'Ngừng hoạt động' }
                 ]}
               />
+
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={formData.is_featured}
+                  onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
+                />
+                Nổi bật
+              </label>
 
               <FormTextarea
                 label="Mô tả & Điểm nổi bật du lịch"
