@@ -49,10 +49,6 @@ import PromotionsPage from './pages/promotions/PromotionsPage.jsx';
 import CustomerListPage from './pages/customers/CustomerListPage.jsx';
 import CustomerDetailPage from './pages/customers/CustomerDetailPage.jsx';
 
-// Chatbot support inbox
-import TicketListPage from './pages/chatbot/TicketListPage.jsx';
-import TicketDetailPage from './pages/chatbot/TicketDetailPage.jsx';
-
 // Admin Users & Roles
 import AdminUsersPage from './pages/users/AdminUsersPage.jsx';
 import RolesPermissionsPage from './pages/users/RolesPermissionsPage.jsx';
@@ -115,13 +111,9 @@ export default function App() {
 						<Route index element={<Navigate to="/admin/dashboard" replace />} />
 						<Route path="dashboard" element={<DashboardPage />} />
 
-					{/* Bookings */}
-					<Route path="bookings" element={<BookingListPage />} />
-					<Route path="bookings/:id" element={<BookingDetailPage />} />
-
-					{/* Chatbot support inbox */}
-					<Route path="chatbot" element={<TicketListPage />} />
-					<Route path="chatbot/:id" element={<TicketDetailPage />} />
+						{/* Bookings */}
+						<Route path="bookings" element={<BookingListPage />} />
+						<Route path="bookings/:id" element={<BookingDetailPage />} />
 
 						{/* Accommodations */}
 						<Route path="accommodations" element={<AccommodationListPage />} />

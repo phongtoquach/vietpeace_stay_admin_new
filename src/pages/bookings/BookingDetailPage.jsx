@@ -3,7 +3,6 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
-import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import { formatVND, formatDateVN, formatDateTimeVN } from '../../data/mockData.js';
 import { bookingsApi } from '../../api/bookings.js';
 import {
@@ -14,8 +13,7 @@ import {
   Clock,
   Check,
   LogIn,
-  LogOut,
-  Pencil
+  LogOut
 } from 'lucide-react';
 
 export default function BookingDetailPage() {
@@ -34,36 +32,6 @@ export default function BookingDetailPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [approving, setApproving] = useState(false);
   const [stayLoading, setStayLoading] = useState(false);
-
-  // T13: chỉnh sửa booking (đổi ngày + thông tin liên hệ)
-  const [editDates, setEditDates] = useState({ checkinDate: '', checkoutDate: '' });
-  const [editContact, setEditContact] = useState({ contactName: '', contactEmail: '', contactPhone: '' });
-  const [datesSaving, setDatesSaving] = useState(false);
-  const [contactSaving, setContactSaving] = useState(false);
-  const [confirmDatesOpen, setConfirmDatesOpen] = useState(false);
-
-  // Số đêm giữ theo đơn gốc của customer: đổi ngày nhận → ngày trả tự tính
-  const shiftCheckoutByNights = (checkinDate, nights) => {
-    const timestamp = Date.parse(`${checkinDate}T00:00:00Z`);
-    if (!Number.isFinite(timestamp)) {
-      return '';
-    }
-    return new Date(timestamp + nights * 86_400_000).toISOString().slice(0, 10);
-  };
-
-  useEffect(() => {
-    if (booking) {
-      setEditDates({
-        checkinDate: booking.checkin_date ? String(booking.checkin_date).slice(0, 10) : '',
-        checkoutDate: booking.checkout_date ? String(booking.checkout_date).slice(0, 10) : '',
-      });
-      setEditContact({
-        contactName: booking.customer_name || '',
-        contactEmail: booking.customer_email || '',
-        contactPhone: booking.customer_phone || '',
-      });
-    }
-  }, [booking]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,55 +160,6 @@ export default function BookingDetailPage() {
       }
     } finally {
       setStayLoading(false);
-    }
-  };
-
-  // T13: lưu ngày mới — số đêm giữ theo đơn gốc; backend tính lại giá theo từng đêm
-  const openConfirmDates = () => {
-    if (!editDates.checkinDate || !editDates.checkoutDate) {
-      showToast('Chọn ngày nhận phòng trước — ngày trả tự tính theo số đêm của đơn.', 'error');
-      return;
-    }
-    if (editDates.checkinDate === String(booking.checkin_date).slice(0, 10)) {
-      showToast('Ngày nhận phòng không thay đổi so với hiện tại.', 'error');
-      return;
-    }
-    setConfirmDatesOpen(true);
-  };
-
-  const handleSaveDates = async () => {
-    setConfirmDatesOpen(false);
-    setDatesSaving(true);
-    try {
-      const result = await bookingsApi.updateDates(booking.id, editDates);
-      showToast(`Đã đổi ngày. Tổng tiền mới: ${formatVND(result.totals.totalAmount)} VNĐ`, 'success');
-      reloadDetail();
-    } catch (err) {
-      if (err.status !== 401) {
-        showToast(`Không đổi được ngày: ${err.message}`, 'error');
-      }
-    } finally {
-      setDatesSaving(false);
-    }
-  };
-
-  // T13: lưu thông tin liên hệ
-  const handleSaveContact = async () => {
-    if (!editContact.contactName.trim() || !editContact.contactEmail.trim() || !editContact.contactPhone.trim()) {
-      showToast('Điền đủ họ tên, email và số điện thoại.', 'error');
-      return;
-    }
-    setContactSaving(true);
-    try {
-      await bookingsApi.updateContact(booking.id, editContact);
-      showToast('Đã cập nhật thông tin liên hệ.', 'success');
-      reloadDetail();
-    } catch (err) {
-      if (err.status !== 401) {
-        showToast(`Không lưu được thông tin liên hệ: ${err.message}`, 'error');
-      }
-    } finally {
-      setContactSaving(false);
     }
   };
 
@@ -424,116 +343,6 @@ export default function BookingDetailPage() {
             </div>
           </div>
 
-          {/* T13: Chỉnh sửa booking — chỉ với PENDING/CONFIRMED */}
-          {['PENDING', 'CONFIRMED'].includes(booking.status) && (
-            <div className="admin-card">
-              <div className="admin-card-header">
-                <div className="admin-card-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Pencil size={14} /> Chỉnh sửa booking
-                </div>
-                <span style={{ fontSize: '12px', color: '#6B7280' }}>
-                  Đổi ngày sẽ tính lại tổng tiền theo giá từng đêm
-                </span>
-              </div>
-              <div className="admin-card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                {/* Đổi ngày nhận — ngày trả tự tính theo số đêm của đơn gốc */}
-                <div>
-                  <h3 style={{ fontSize: '13px', fontWeight: 700, color: '#292D32', marginBottom: '10px' }}>
-                    Đổi ngày nhận phòng
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ color: '#6B7280' }}>Ngày nhận phòng</span>
-                      <input
-                        type="date"
-                        className="filter-input"
-                        value={editDates.checkinDate}
-                        onChange={(e) => {
-                          const checkinDate = e.target.value;
-                          setEditDates((prev) => ({
-                            ...prev,
-                            checkinDate,
-                            checkoutDate: checkinDate
-                              ? shiftCheckoutByNights(checkinDate, booking.nights || 1)
-                              : '',
-                          }));
-                        }}
-                      />
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ color: '#6B7280' }}>
-                        Ngày trả phòng (tự theo {booking.nights} đêm của đơn gốc)
-                      </span>
-                      <input
-                        type="date"
-                        className="filter-input"
-                        value={editDates.checkoutDate}
-                        disabled
-                        style={{ background: '#F2F4F7', color: '#6B7280' }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      style={{ marginTop: '4px', alignSelf: 'flex-start' }}
-                      disabled={datesSaving
-                        || !editDates.checkinDate
-                        || editDates.checkinDate === String(booking.checkin_date).slice(0, 10)}
-                      onClick={openConfirmDates}
-                    >
-                      <Pencil size={13} /> {datesSaving ? 'Đang tính lại giá...' : 'Đổi ngày nhận phòng'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Sửa thông tin liên hệ */}
-                <div>
-                  <h3 style={{ fontSize: '13px', fontWeight: 700, color: '#292D32', marginBottom: '10px' }}>
-                    Thông tin liên hệ khách
-                  </h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ color: '#6B7280' }}>Họ và tên</span>
-                      <input
-                        type="text"
-                        className="filter-input"
-                        value={editContact.contactName}
-                        onChange={(e) => setEditContact((prev) => ({ ...prev, contactName: e.target.value }))}
-                      />
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ color: '#6B7280' }}>Email</span>
-                      <input
-                        type="email"
-                        className="filter-input"
-                        value={editContact.contactEmail}
-                        onChange={(e) => setEditContact((prev) => ({ ...prev, contactEmail: e.target.value }))}
-                      />
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ color: '#6B7280' }}>Số điện thoại</span>
-                      <input
-                        type="text"
-                        className="filter-input"
-                        value={editContact.contactPhone}
-                        onChange={(e) => setEditContact((prev) => ({ ...prev, contactPhone: e.target.value }))}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ marginTop: '4px', alignSelf: 'flex-start' }}
-                      disabled={contactSaving}
-                      onClick={handleSaveContact}
-                    >
-                      <Pencil size={13} /> {contactSaving ? 'Đang lưu...' : 'Lưu thông tin liên hệ'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Pricing Calculation Breakdown */}
           <div className="admin-card">
             <div className="admin-card-header">
@@ -716,24 +525,6 @@ export default function BookingDetailPage() {
           </div>
         </div>
       </div>
-
-      {/* T13: modal xác nhận đổi ngày */}
-      <ConfirmDialog
-        isOpen={confirmDatesOpen}
-        title="Xác nhận đổi ngày nhận phòng"
-        message={
-          booking.status === 'CONFIRMED'
-            ? `Đổi sang ${formatDateVN(editDates.checkinDate)} (giữ nguyên ${booking.nights} đêm). `
-              + 'Đơn đã thanh toán — kỳ mới lệch tiền sẽ bị từ chối.'
-            : `Đổi sang ${formatDateVN(editDates.checkinDate)} (giữ nguyên ${booking.nights} đêm). `
-              + 'Tổng tiền sẽ tính lại theo giá kỳ mới.'
-        }
-        confirmLabel="Xác nhận đổi ngày"
-        cancelLabel="Hủy"
-        confirmVariant="primary"
-        onConfirm={handleSaveDates}
-        onCancel={() => setConfirmDatesOpen(false)}
-      />
     </div>
   );
 }

@@ -162,28 +162,4 @@ export const bookingsApi = {
     });
     return payload.data;
   },
-
-  async updateDates(id, { checkinDate, checkoutDate }) {
-    if (!id) {
-      throw new Error("Thiếu booking id.");
-    }
-
-    const payload = await apiFetch(`/bookings/${id}/dates`, {
-      method: "PATCH",
-      body: JSON.stringify({ checkinDate, checkoutDate }),
-    });
-    return payload.data;
-  },
-
-  async updateContact(id, { contactName, contactEmail, contactPhone }) {
-    if (!id) {
-      throw new Error("Thiếu booking id.");
-    }
-
-    const payload = await apiFetch(`/bookings/${id}/contact`, {
-      method: "PATCH",
-      body: JSON.stringify({ contactName, contactEmail, contactPhone }),
-    });
-    return payload.data;
-  },
 };
