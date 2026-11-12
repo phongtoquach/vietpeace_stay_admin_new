@@ -83,7 +83,8 @@ export default function AmenitiesPage() {
     amenity_scope: '',
     icon: 'Sparkles',
     description: '',
-    status: 'Active'
+    status: 'Active',
+    is_featured: false
   });
 
   const handleOpenCreate = () => {
@@ -98,7 +99,8 @@ export default function AmenitiesPage() {
         amenity_scope: '',
         icon: 'Sparkles',
         description: '',
-        status: 'Active'
+        status: 'Active',
+        is_featured: false
     });
 
     setModalOpen(true);
@@ -694,23 +696,44 @@ const handleToggleFeatured = async (item) => {
 
                   <FormInput
                       label="Icon Key"
-                      value={formData.icon}
-                      onChange={(e) =>
-                          setFormData({
-                              ...formData,
-                              icon: e.target.value
-                          })
-                      }
-                      placeholder="Ví dụ: Wifi, Sparkles, Car, Waves..."
-                  />
+                        value={formData.icon}
+                        onChange={(e) =>
+                            setFormData({
+                                ...formData,
+                                icon: e.target.value
+                            })
+                        }
+                        placeholder="Ví dụ: Wifi, Sparkles, Car, Waves..."
+                    />
 
-                  <FormTextarea
-                    label="Mô tả chi tiết"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    rows={3}
-                    placeholder="Mô tả các thông số kỹ thuật, quy định phục vụ và tiêu chuẩn chất lượng..."
-                  />
+                    {/* Đánh dấu tiện nghi nổi bật */}
+                    <label className="amenity-featured-checkbox">
+                        <input
+                            type="checkbox"
+                            checked={Boolean(formData.is_featured)}
+                            onChange={(e) =>
+                                setFormData({
+                                    ...formData,
+                                    is_featured: e.target.checked
+                                })
+                            }
+                        />
+
+                        <span>⭐ Nổi bật</span>
+                    </label>
+
+                    <FormTextarea
+                        label="Mô tả chi tiết"
+                        value={formData.description}
+                        onChange={(e) =>
+                            setFormData({
+                                ...formData,
+                                description: e.target.value
+                            })
+                        }
+                        rows={3}
+                        placeholder="Mô tả các thông số kỹ thuật, quy định phục vụ và tiêu chuẩn chất lượng..."
+                    />
                 </div>
               </div>
 

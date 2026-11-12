@@ -81,6 +81,21 @@ function PermissionRoute({ permission, children }) {
 	return children;
 }
 
+function CustomerAccessRoute({ children }) {
+    const { currentLoggedInUser } = useAuth();
+
+    const allowedRoles = ['ADMIN', 'ACCOMMODATION_MANAGER'];
+
+    if (
+        currentLoggedInUser &&
+        !allowedRoles.includes(currentLoggedInUser.role)
+    ) {
+        return <Navigate to="/admin/dashboard" replace />;
+    }
+
+    return children;
+}
+
 export default function App() {
 	return (
 		<AuthProvider>
@@ -133,9 +148,24 @@ export default function App() {
 						{/* Promotions */}
 						<Route path="promotions" element={<PromotionsPage />} />
 
-						{/* Customers */}
-						<Route path="customers" element={<CustomerListPage />} />
-						<Route path="customers/:id" element={<CustomerDetailPage />} />
+						{/* Customers - ADMIN và ACCOMMODATION_MANAGER */}
+						<Route
+						path="customers"
+						element={
+						<CustomerAccessRoute>
+							<CustomerListPage />
+						</CustomerAccessRoute>
+						}
+						/>
+
+						<Route
+						path="customers/:id"
+						element={
+						<CustomerAccessRoute>
+							<CustomerDetailPage />
+						</CustomerAccessRoute>
+						}
+						/>
 
 						{/* Users & Roles (Chỉ Super Admin) */}
 						<Route path="users" element={<AdminOnlyRoute><AdminUsersPage /></AdminOnlyRoute>} />

@@ -33,8 +33,9 @@ export default function Sidebar() {
   const canViewAccommodationsGroup = canViewOwnFacility || canViewRooms;
   const canViewPricing = isAdmin || hasPermission('pricing.read') || hasPermission('pricing.update');
   const canViewPromotions = isAdmin || hasPermission('promotions.read') || hasPermission('promotions.manage');
-  const canViewCustomers = isAdmin || hasPermission('customers.read') || hasPermission('customers.manage');
-  const canViewReports = isAdmin || hasPermission('reports.view');
+  const canViewCustomers = isAdmin || isManager || hasPermission('customers.read') || hasPermission('customers.manage');  
+  const canViewReports = isAdmin || hasPermission('reports.view_all') || hasPermission('reports.export');
+
 
   // Expanded menu sections state
   const [expandedSections, setExpandedSections] = useState({

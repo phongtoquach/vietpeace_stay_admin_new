@@ -765,3 +765,26 @@
     margin-left: auto;
     margin-right: auto;
 }
+
+/* Checkbox tiện nghi nổi bật */
+.amenity-featured-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    width: fit-content;
+}
+
+.amenity-featured-checkbox input {
+    width: 16px;
+    height: 16px;
+    accent-color: #EAB308;
+    cursor: pointer;
+}
+
+.amenity-featured-checkbox span {
+    user-select: none;
+}

@@ -1,63 +1,74 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
 import Pagination from '../../components/common/Pagination.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
-import { formatVND } from '../../data/mockData.js';
 import { Eye, Trash2, Search, RotateCcw } from 'lucide-react';
+import { apiFetch } from '../../api/client.js';
 
 export default function CustomerListPage() {
-  const { customers, deleteCustomer } = useAdmin();
+  // State dữ liệu Customer
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [sortField, setSortField] = useState('total_spent');
-  const [sortDirection, setSortDirection] = useState('desc');
+  // State phân trang
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  });
 
-  const filteredData = useMemo(() => {
-    return customers.filter((c) => {
-      const matchSearch =
-        !searchTerm ||
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.city.toLowerCase().includes(searchTerm.toLowerCase());
+  // State tìm kiếm, lọc và sắp xếp
+const [searchTerm, setSearchTerm] = useState('');
+const [statusFilter, setStatusFilter] = useState('');
+const [sortField, setSortField] = useState('createdAt');
+const [sortDirection, setSortDirection] = useState('desc');
 
-      const matchStatus = !statusFilter || c.status === statusFilter;
-      return matchSearch && matchStatus;
-    }).sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [customers, searchTerm, statusFilter, sortField, sortDirection]);
+  // Gọi API lấy danh sách Customer
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        setLoading(true);
+        setError('');
 
-  const totalItems = filteredData.length;
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, currentPage, pageSize]);
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(pageSize),
+        search: searchTerm,
+        sortField: sortField,
+        sortDirection: sortDirection
+      });
+
+        const response = await apiFetch(
+          `/customers?${params.toString()}`
+        );
+
+        setCustomers(response.data.items || []);
+        setPagination(response.data.pagination);
+
+      } catch (err) {
+        console.error('Lỗi lấy danh sách Customer:', err);
+        setError(err.message || 'Không thể tải danh sách khách hàng.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCustomers();
+  }, [currentPage, pageSize, searchTerm, sortField, sortDirection]);
+
+const totalItems = pagination.total;
+const paginatedData = customers;
 
   const handleSort = (field, direction) => {
     setSortField(field);
     setSortDirection(direction);
-  };
-
-  const confirmDelete = () => {
-    if (deleteTarget) {
-      deleteCustomer(deleteTarget.id);
-      setDeleteTarget(null);
-    }
   };
 
   const columns = [
@@ -70,7 +81,7 @@ export default function CustomerListPage() {
     },
     {
       header: 'Họ và tên',
-      accessor: 'name',
+      accessor: 'fullName',
       sortable: true,
       render: (row) => (
         <div>
@@ -78,11 +89,8 @@ export default function CustomerListPage() {
             to={`/admin/customers/${row.id}`}
             style={{ fontWeight: 600, color: '#292D32' }}
           >
-            {row.name}
+            {row.fullName}
           </Link>
-          <div style={{ fontSize: '11px', color: '#6B7280' }}>
-            {row.city}, {row.country}
-          </div>
         </div>
       )
     },
@@ -94,30 +102,20 @@ export default function CustomerListPage() {
     },
     {
       header: 'Số điện thoại',
-      accessor: 'phone',
+      accessor: 'phoneNumber',
       sortable: true,
-      render: (row) => <span className="tabular-nums">{row.phone}</span>
+      render: (row) => <span className="tabular-nums">
+        {row.phoneNumber || 'Chưa cập nhật'}</span>
     },
     {
       header: 'Số lượt đặt phòng',
-      accessor: 'total_bookings',
+      accessor: 'bookingCount',
       sortable: true,
       width: '140px',
       align: 'center',
       render: (row) => (
         <span className="tabular-nums" style={{ fontWeight: 600 }}>
-          {row.total_bookings} lượt
-        </span>
-      )
-    },
-    {
-      header: 'Tổng chi tiêu',
-      accessor: 'total_spent',
-      sortable: true,
-      align: 'right',
-      render: (row) => (
-        <span style={{ fontWeight: 600, color: '#287A4B' }} className="tabular-nums">
-          {formatVND(row.total_spent)}
+          {row.bookingCount} lượt
         </span>
       )
     },
@@ -142,14 +140,6 @@ export default function CustomerListPage() {
           >
             <Eye size={13} />
           </Link>
-          <button
-            type="button"
-            className="row-action-btn delete"
-            title="Xóa khách hàng"
-            onClick={() => setDeleteTarget(row)}
-          >
-            <Trash2 size={13} />
-          </button>
         </div>
       )
     }
@@ -159,8 +149,14 @@ export default function CustomerListPage() {
     <div>
       <PageHeader
         title="Danh bạ khách hàng"
-        description="Tra cứu hồ sơ khách hàng đã đăng ký, lịch sử lưu trú, tổng chi tiêu tích lũy và thông tin liên lạc."
-      />
+        description="Tra cứu hồ sơ khách hàng đã đăng ký và thông tin liên lạc."      />
+
+      {loading && <p>Đang tải danh sách khách hàng...</p>}
+      {error && (
+        <p style={{ color: 'red' }}>
+          {error}
+        </p>
+      )}
 
       <div className="filter-panel">
         <div className="filter-group filter-group-wide">
@@ -170,8 +166,7 @@ export default function CustomerListPage() {
               type="text"
               className="filter-input"
               style={{ width: '100%', paddingLeft: '28px' }}
-              placeholder="Tìm theo tên, email, số điện thoại, tỉnh/thành..."
-              value={searchTerm}
+              placeholder="Tìm theo tên, email hoặc số điện thoại..."              value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
@@ -230,16 +225,6 @@ export default function CustomerListPage() {
           setPageSize(size);
           setCurrentPage(1);
         }}
-      />
-
-      <ConfirmDialog
-        isOpen={Boolean(deleteTarget)}
-        title="Xóa hồ sơ khách hàng"
-        message={`Bạn có chắc chắn muốn xóa hồ sơ khách hàng "${deleteTarget?.name}"?`}
-        confirmLabel="Xác nhận xóa"
-        confirmVariant="danger"
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );
