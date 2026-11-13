@@ -1,3 +1,4 @@
+import ValidatedForm, { FieldError } from '../forms/ValidatedForm';
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { KeyRound, ShieldAlert, CheckCircle2, Lock, Eye, EyeOff } from 'lucide-react';
@@ -175,7 +176,7 @@ export default function ForcePasswordChangeModal() {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit}>
+            <ValidatedForm onSubmit={handleSubmit}>
               <div
                 style={{
                   display: 'flex',
@@ -223,10 +224,14 @@ export default function ForcePasswordChangeModal() {
                 >
                   Mật khẩu mới (tối thiểu 8 ký tự): <span style={{ color: '#DC2626' }}>*</span>
                 </label>
+                <FieldError name="field-7907" />
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showNewPassword ? 'text' : 'password'}
                     required
+                    minLength={8}
+                    name="field-7907"
+                    data-validation-label="Mật khẩu mới (tối thiểu 8 ký tự)"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Nhập mật khẩu mới..."
@@ -284,10 +289,13 @@ export default function ForcePasswordChangeModal() {
                 >
                   Xác nhận lại mật khẩu mới: <span style={{ color: '#DC2626' }}>*</span>
                 </label>
+                <FieldError name="field-10520" />
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     required
+                    name="field-10520"
+                    data-validation-label="Xác nhận lại mật khẩu mới"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Nhập lại mật khẩu mới..."
@@ -359,7 +367,7 @@ export default function ForcePasswordChangeModal() {
                   {loading ? 'Đang lưu...' : 'Lưu mật khẩu mới'}
                 </button>
               </div>
-            </form>
+            </ValidatedForm>
           )}
         </div>
       </div>

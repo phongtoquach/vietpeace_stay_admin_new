@@ -1,3 +1,4 @@
+import ValidatedForm, { FieldError } from '../forms/ValidatedForm';
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -553,7 +554,7 @@ export default function Header({ breadcrumbItems = [] }) {
               </button>
             </div>
 
-            <form onSubmit={handlePasswordChangeSubmit}>
+            <ValidatedForm onSubmit={handlePasswordChangeSubmit}>
               <div className="modal-body" style={{ padding: '20px' }}>
                 {passwordError && (
                   <div
@@ -575,6 +576,7 @@ export default function Header({ breadcrumbItems = [] }) {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Mật khẩu mới (tối thiểu 8 ký tự):
                   </label>
+                  <FieldError name="field-21718" />
                   <div style={{ position: 'relative' }}>
                     <Lock
                       size={15}
@@ -584,6 +586,9 @@ export default function Header({ breadcrumbItems = [] }) {
                     <input
                       type={showNewPassword ? 'text' : 'password'}
                       required
+                      minLength={8}
+                      name="field-21718"
+                      data-validation-label="Mật khẩu mới (tối thiểu 8 ký tự)"
                       placeholder="Nhập mật khẩu mới..."
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
@@ -616,6 +621,7 @@ export default function Header({ breadcrumbItems = [] }) {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Xác nhận lại mật khẩu mới:
                   </label>
+                  <FieldError name="field-23693" />
                   <div style={{ position: 'relative' }}>
                     <Lock
                       size={15}
@@ -625,6 +631,8 @@ export default function Header({ breadcrumbItems = [] }) {
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       required
+                      name="field-23693"
+                      data-validation-label="Xác nhận lại mật khẩu mới"
                       placeholder="Nhập lại mật khẩu mới..."
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
@@ -667,7 +675,7 @@ export default function Header({ breadcrumbItems = [] }) {
                   {passwordLoading ? 'Đang lưu...' : 'Lưu mật khẩu mới'}
                 </button>
               </div>
-            </form>
+            </ValidatedForm>
           </div>
         </div>
       )}

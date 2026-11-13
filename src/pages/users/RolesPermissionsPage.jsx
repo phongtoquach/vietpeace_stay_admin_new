@@ -1,3 +1,4 @@
+import ValidatedForm, { FieldError } from '../../components/forms/ValidatedForm';
 import { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
@@ -717,7 +718,7 @@ export default function RolesPermissionsPage() {
                   </p>
                 </div>
               ) : (
-                <form id="assign-manager-form" onSubmit={handleAssignSubmit}>
+                <ValidatedForm id="assign-manager-form" onSubmit={handleAssignSubmit}>
                   {/* Banner cơ sở được chọn */}
                   <div
                     style={{
@@ -778,31 +779,49 @@ export default function RolesPermissionsPage() {
                     >
                       Họ và tên người quản lý: <span style={{ color: '#DC2626' }}>*</span>
                     </label>
-                    {!createManager ? <select
-                      required
-                      disabled={loadingManagers || assignLoading}
-                      value={assignForm.managerId}
-                      onChange={handleSelectManager}
-                      className="filter-select"
-                      style={{ width: '100%', height: '38px', fontSize: '13.5px', boxSizing: 'border-box' }}
-                    >
-                      <option value="">
-                        {loadingManagers
-                          ? '-- Đang tải danh sách Manager... --'
-                          : unassignedManagers.length === 0
-                          ? '-- Hiện không có Manager nào chưa được phân công --'
-                          : '-- Chọn Manager chưa được phân công --'}
-                      </option>
-                      {unassignedManagers.map((mgr) => (
-                        <option key={mgr.id} value={mgr.id}>
-                          {mgr.fullName} {mgr.personalEmail ? `(${mgr.personalEmail})` : ''}
-                        </option>
-                      ))}
-                    </select> : (
-                      <input type="text" required maxLength={255} className="form-input"
-                        placeholder="Nhập họ và tên Manager mới" value={assignForm.fullName}
-                        disabled={assignLoading}
-                        onChange={(e) => setAssignForm((prev) => ({ ...prev, fullName: e.target.value }))} />
+                    {!createManager ? (
+                      <>
+                        <FieldError name="field-32180" />
+                        <select
+                          required
+                          name="field-32180"
+                          data-validation-label="Người quản lý"
+                          disabled={loadingManagers || assignLoading}
+                          value={assignForm.managerId}
+                          onChange={handleSelectManager}
+                          className="filter-select"
+                          style={{ width: '100%', height: '38px', fontSize: '13.5px', boxSizing: 'border-box' }}
+                        >
+                          <option value="">
+                            {loadingManagers
+                              ? '-- Đang tải danh sách Manager... --'
+                              : unassignedManagers.length === 0
+                              ? '-- Hiện không có Manager nào chưa được phân công --'
+                              : '-- Chọn Manager chưa được phân công --'}
+                          </option>
+                          {unassignedManagers.map((mgr) => (
+                            <option key={mgr.id} value={mgr.id}>
+                              {mgr.fullName} {mgr.personalEmail ? `(${mgr.personalEmail})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    ) : (
+                      <>
+                        <FieldError name="field-33307" />
+                        <input
+                          type="text"
+                          required
+                          name="field-33307"
+                          data-validation-label="Họ và tên Manager mới"
+                          maxLength={255}
+                          className="form-input"
+                          placeholder="Nhập họ và tên Manager mới"
+                          value={assignForm.fullName}
+                          disabled={assignLoading}
+                          onChange={(e) => setAssignForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                        />
+                      </>
                     )}
                     {!loadingManagers && unassignedManagers.length === 0 && (
                       <small style={{ color: '#B45309', fontSize: '12px', display: 'block', marginTop: '6px' }}>
@@ -833,9 +852,12 @@ export default function RolesPermissionsPage() {
                     >
                       Địa chỉ email cá nhân: <span style={{ color: '#DC2626' }}>*</span>
                     </label>
+                    <FieldError name="field-35241" />
                     <input
                       type="email"
                       required
+                      name="field-35241"
+                      data-validation-label="Địa chỉ email cá nhân"
                       readOnly={!createManager}
                       disabled={assignLoading}
                       maxLength={255}
@@ -868,8 +890,11 @@ export default function RolesPermissionsPage() {
                     >
                       Số điện thoại liên hệ:
                     </label>
+                    <FieldError name="field-36795" />
                     <input
                       type="text"
+                      name="field-36795"
+                      data-validation-label="Số điện thoại liên hệ"
                       readOnly={!createManager}
                       disabled={assignLoading}
                       maxLength={20}
@@ -888,7 +913,7 @@ export default function RolesPermissionsPage() {
                       }}
                     />
                   </div>
-                </form>
+                </ValidatedForm>
               )}
             </div>
 

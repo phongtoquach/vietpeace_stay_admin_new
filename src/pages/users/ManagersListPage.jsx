@@ -1,3 +1,4 @@
+import ValidatedForm, { FieldError } from '../../components/forms/ValidatedForm';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
@@ -556,7 +557,7 @@ export default function ManagersListPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit}>
+            <ValidatedForm onSubmit={handleAddSubmit}>
               <div className="modal-body">
                 {addError && (
                   <div
@@ -597,9 +598,12 @@ export default function ManagersListPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Họ và tên Manager: <span style={{ color: '#DC2626' }}>*</span>
                   </label>
+                  <FieldError name="field-22299" />
                   <input
                     type="text"
                     required
+                    name="field-22299"
+                    data-validation-label="Họ và tên Manager"
                     placeholder="Ví dụ: Nguyễn Văn Hoàng"
                     value={addForm.fullName}
                     onChange={(e) => setAddForm({ ...addForm, fullName: e.target.value })}
@@ -612,9 +616,12 @@ export default function ManagersListPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Địa chỉ Email cá nhân: <span style={{ color: '#DC2626' }}>*</span>
                   </label>
+                  <FieldError name="field-23071" />
                   <input
                     type="email"
                     required
+                    name="field-23071"
+                    data-validation-label="Địa chỉ Email cá nhân"
                     placeholder="Ví dụ: hoangnv.manager@gmail.com"
                     value={addForm.personalEmail}
                     onChange={(e) => setAddForm({ ...addForm, personalEmail: e.target.value })}
@@ -654,7 +661,7 @@ export default function ManagersListPage() {
                   <UserPlus size={14} /> {addLoading ? 'Đang lưu...' : 'Thêm vào danh sách'}
                 </button>
               </div>
-            </form>
+            </ValidatedForm>
           </div>
         </div>
       )}
@@ -679,7 +686,7 @@ export default function ManagersListPage() {
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit}>
+            <ValidatedForm onSubmit={handleEditSubmit}>
               <div className="modal-body">
                 {editError && (
                   <div
@@ -701,9 +708,12 @@ export default function ManagersListPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Họ và tên Manager: <span style={{ color: '#DC2626' }}>*</span>
                   </label>
+                  <FieldError name="field-27120" />
                   <input
                     type="text"
                     required
+                    name="field-27120"
+                    data-validation-label="Họ và tên Manager"
                     value={editForm.fullName}
                     onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
                     className="filter-input"
@@ -715,9 +725,12 @@ export default function ManagersListPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Địa chỉ Email cá nhân: <span style={{ color: '#DC2626' }}>*</span>
                   </label>
+                  <FieldError name="field-27836" />
                   <input
                     type="email"
                     required
+                    name="field-27836"
+                    data-validation-label="Địa chỉ Email cá nhân"
                     value={editForm.personalEmail}
                     onChange={(e) => setEditForm({ ...editForm, personalEmail: e.target.value })}
                     className="filter-input"
@@ -752,7 +765,7 @@ export default function ManagersListPage() {
                   <Save size={14} /> {editLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
                 </button>
               </div>
-            </form>
+            </ValidatedForm>
           </div>
         </div>
       )}

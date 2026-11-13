@@ -1,3 +1,4 @@
+import ValidatedForm, { FieldError } from '../../components/forms/ValidatedForm';
 import { useState, useEffect } from 'react';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -677,7 +678,7 @@ export default function AdminUsersPage() {
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit}>
+            <ValidatedForm onSubmit={handleEditSubmit}>
               <div className="modal-body">
                 {editError && (
                   <div
@@ -715,9 +716,12 @@ export default function AdminUsersPage() {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Họ và tên: <span style={{ color: '#dc2626' }}>*</span>
                   </label>
+                  <FieldError name="field-28306" />
                   <input
                     type="text"
                     required
+                    name="field-28306"
+                    data-validation-label="Họ và tên"
                     value={editForm.fullName}
                     onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
                     className="filter-input"
@@ -776,7 +780,7 @@ export default function AdminUsersPage() {
                   <Save size={14} /> {editLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
                 </button>
               </div>
-            </form>
+            </ValidatedForm>
           </div>
         </div>
       )}
