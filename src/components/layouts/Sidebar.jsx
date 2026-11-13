@@ -34,7 +34,7 @@ export default function Sidebar() {
   const canViewPricing = isAdmin || hasPermission('pricing.read') || hasPermission('pricing.update');
   const canViewPromotions = isAdmin || hasPermission('promotions.read') || hasPermission('promotions.manage');
   const canViewCustomers = isAdmin || isManager || hasPermission('customers.read') || hasPermission('customers.manage');  
-  const canViewReports = isAdmin || hasPermission('reports.view_all') || hasPermission('reports.export');
+  const canViewReports = isAdmin || hasPermission('reports.view');
 
 
   // Expanded menu sections state
