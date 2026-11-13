@@ -8,6 +8,7 @@ import ReportYearSelect from '../../components/reports/ReportYearSelect.jsx';
 import ReportMonthSelect from '../../components/reports/ReportMonthSelect.jsx';
 import DailyTrendChart from '../../components/reports/DailyTrendChart.jsx';
 import MonthlyOrdersTable from '../../components/reports/MonthlyOrdersTable.jsx';
+import ReportSuiteTabs from '../../components/reports/ReportSuiteTabs.jsx';
 import {
   buildReportPath,
   buildReportPeriodQuery,
@@ -169,6 +170,10 @@ export default function OccupancyReportPage() {
           </div>
         }
       />
+
+      <div className="fin-hub-nav">
+        <ReportSuiteTabs />
+      </div>
 
       {error && (
         <div

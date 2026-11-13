@@ -9,18 +9,19 @@ import {
 } from '../../components/common/Charts.jsx';
 import { formatVND, formatDateVN } from '../../data/mockData.js';
 import { dashboardApi } from '../../api/dashboard.js';
+import { financialReportsApi, formatCompactVND } from '../../api/financialReports.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import {
   CalendarCheck,
   Clock,
   LogOut as CheckOutIcon,
   AlertCircle,
-  Users,
-  Coins,
   BedDouble,
-  CheckCircle2,
+  Coins,
   Eye,
-  Plus,
-  ArrowRight
+  ArrowRight,
+  BarChart3,
+  AlertTriangle
 } from 'lucide-react';
 
 const PAYMENT_STATUS_LABEL = {
@@ -57,20 +58,33 @@ const STATUS_META = {
 };
 
 export default function DashboardPage() {
+  const { currentLoggedInUser, hasPermission } = useAuth();
+  const isAdmin = currentLoggedInUser?.role === 'ADMIN';
+  const canViewReports = isAdmin || hasPermission('reports.view');
+
   const [summary, setSummary] = useState(null);
   const [charts, setCharts] = useState(null);
+  const [finOverview, setFinOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    const currentYear = new Date().getFullYear();
 
-    Promise.all([dashboardApi.getSummary(), dashboardApi.getCharts()])
-      .then(([summaryData, chartsData]) => {
+    Promise.all([
+      dashboardApi.getSummary(),
+      dashboardApi.getCharts(),
+      canViewReports
+        ? financialReportsApi.getOverview({ year: currentYear, periodType: 'YEAR' }).catch(() => null)
+        : Promise.resolve(null),
+    ])
+      .then(([summaryData, chartsData, finData]) => {
         if (!cancelled) {
           setSummary(summaryData);
           setCharts(chartsData);
+          setFinOverview(finData);
         }
       })
       .catch((err) => {
@@ -87,7 +101,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, canViewReports]);
 
   const handleRetry = () => {
     setLoading(true);
@@ -130,25 +144,12 @@ export default function DashboardPage() {
 
   const displayValue = (value) => (loading ? '…' : value);
 
+  const finSummary = finOverview?.summary || null;
+  const activeFinYear = finOverview?.period?.year || new Date().getFullYear();
+
   return (
-    <div>
-      <PageHeader
-        title="Tổng quan hoạt động lưu trú"
-        description="Thống kê công suất phòng, hiệu suất doanh thu và giám sát lượt khách đến theo phạm vi bạn quản lý."
-        breadcrumb={[
-          { label: 'Tổng quan' }
-        ]}
-        actions={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Link to="/admin/bookings" className="btn btn-secondary btn-sm">
-              Xem tất cả đặt phòng
-            </Link>
-            <Link to="/admin/accommodations/create" className="btn btn-primary btn-sm">
-              <Plus size={14} /> Thêm cơ sở lưu trú
-            </Link>
-          </div>
-        }
-      />
+    <div className="dashboard-modern">
+      <PageHeader title="Tổng quan hoạt động kinh doanh" />
 
       {error && (
         <div
@@ -173,98 +174,161 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Summary Stat Cards Grid */}
-      <div className="stat-cards-grid">
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Tổng đơn đặt phòng</span>
-            <span className="stat-card-value tabular-nums">{displayValue(stats.totalBookings)}</span>
-            <span className="stat-card-sub">Đơn trong phạm vi quản lý</span>
-          </div>
-          <div className="stat-card-icon">
-            <CalendarCheck size={20} />
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Nhận phòng hôm nay</span>
-            <span className="stat-card-value tabular-nums">{displayValue(stats.checkinsToday)}</span>
-            <span className="stat-card-sub" style={{ color: '#287A4B' }}>Lượt khách dự kiến đến</span>
-          </div>
-          <div className="stat-card-icon" style={{ backgroundColor: '#EAF5EE', borderColor: '#BAE2C8', color: '#287A4B' }}>
-            <Clock size={20} />
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Trả phòng hôm nay</span>
-            <span className="stat-card-value tabular-nums">{displayValue(stats.checkoutsToday)}</span>
-            <span className="stat-card-sub">Lượt khách trả phòng</span>
-          </div>
-          <div className="stat-card-icon" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1E6091' }}>
-            <CheckOutIcon size={20} />
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Đặt phòng chờ duyệt</span>
-            <span className="stat-card-value tabular-nums" style={{ color: '#A66A00' }}>{displayValue(stats.pendingBookings)}</span>
-            <span className="stat-card-sub">Chờ xác nhận từ lễ tân</span>
-          </div>
-          <div className="stat-card-icon" style={{ backgroundColor: '#FEF8E7', borderColor: '#F8DF9E', color: '#A66A00' }}>
-            <AlertCircle size={20} />
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Tổng khách hàng</span>
-            <span className="stat-card-value tabular-nums">{displayValue(stats.totalCustomers)}</span>
-            <span className="stat-card-sub">Khách đã đặt phòng</span>
-          </div>
-          <div className="stat-card-icon">
-            <Users size={20} />
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Doanh thu tháng (VNĐ)</span>
-            <span className="stat-card-value tabular-nums" style={{ fontSize: '16.5px' }}>
-              {loading ? '…' : formatVND(stats.monthlyRevenue)}
+      {/* 4 Hero KPI Cards (1 hàng cân đối, tối giản) */}
+      <section className="dash-kpi-grid" aria-label="Chỉ số tổng quan chính">
+        <div className="dash-kpi-card">
+          <div className="dash-kpi-head">
+            <span className="dash-kpi-label">
+              {canViewReports && finSummary ? `Tổng nguồn thu ${activeFinYear}` : 'Doanh thu kỳ này'}
             </span>
-            <span className="stat-card-sub">Doanh thu thực thu kỳ này</span>
+            <span className="dash-kpi-icon" style={{ background: '#EFF6FF', color: '#0284C7' }}>
+              <Coins size={17} />
+            </span>
           </div>
-          <div className="stat-card-icon">
-            <Coins size={20} />
+          <div className="dash-kpi-value tabular-nums" style={{ color: '#0369A1' }}>
+            {loading
+              ? '…'
+              : canViewReports && finSummary
+                ? formatCompactVND(finSummary.totalNetRevenue)
+                : formatCompactVND(stats.monthlyRevenue)}
+          </div>
+          <div className="dash-kpi-sub">
+            {canViewReports && finSummary ? (
+              <>
+                LN sau thuế{' '}
+                <strong style={{ color: finSummary.totalNetProfitAfterTax < 0 ? '#DC2626' : '#15803D' }}>
+                  {formatCompactVND(finSummary.totalNetProfitAfterTax)}
+                </strong>
+                {' · '}
+                OPEX {formatCompactVND(finSummary.totalOperatingExpenses)}
+              </>
+            ) : (
+              `Thực thu: ${formatVND(stats.monthlyRevenue)}`
+            )}
           </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Phòng đang có khách</span>
-            <span className="stat-card-value tabular-nums">{displayValue(stats.occupiedRooms)}</span>
-            <span className="stat-card-sub">{occupancyRate}% công suất</span>
+        <div className="dash-kpi-card">
+          <div className="dash-kpi-head">
+            <span className="dash-kpi-label">Tổng đơn đặt phòng</span>
+            <span className="dash-kpi-icon" style={{ background: '#FFFBEB', color: '#B45309' }}>
+              <CalendarCheck size={17} />
+            </span>
           </div>
-          <div className="stat-card-icon" style={{ backgroundColor: '#FEF8E7', borderColor: '#F8DF9E', color: '#A66A00' }}>
-            <BedDouble size={20} />
+          <div className="dash-kpi-value tabular-nums">{displayValue(stats.totalBookings)}</div>
+          <div className="dash-kpi-sub">
+            {displayValue(stats.totalCustomers)} khách hàng đã đặt · {displayValue(stats.pendingBookings)} chờ duyệt
           </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-card-left">
-            <span className="stat-card-title">Phòng còn trống</span>
-            <span className="stat-card-value tabular-nums">{displayValue(stats.availableRooms)}</span>
-            <span className="stat-card-sub">Trên tổng {displayValue(stats.totalRooms)} phòng</span>
+        <div className="dash-kpi-card">
+          <div className="dash-kpi-head">
+            <span className="dash-kpi-label">Công suất phòng hôm nay</span>
+            <span className="dash-kpi-icon" style={{ background: '#ECFDF5', color: '#15803D' }}>
+              <BedDouble size={17} />
+            </span>
           </div>
-          <div className="stat-card-icon" style={{ backgroundColor: '#EAF5EE', borderColor: '#BAE2C8', color: '#287A4B' }}>
-            <CheckCircle2 size={20} />
+          <div>
+            <div className="dash-kpi-value tabular-nums" style={{ color: '#15803D' }}>
+              {loading ? '…' : `${occupancyRate}%`}
+            </div>
+            <div className="dash-progress-track" aria-hidden="true">
+              <div
+                className="dash-progress-fill"
+                style={{ width: `${Math.min(100, Math.max(0, Number(occupancyRate) || 0))}%` }}
+              />
+            </div>
+          </div>
+          <div className="dash-kpi-sub">
+            {displayValue(stats.occupiedRooms)} có khách · {displayValue(stats.availableRooms)} trống / {displayValue(stats.totalRooms)} phòng
           </div>
         </div>
-      </div>
+
+        <div className="dash-kpi-card">
+          <div className="dash-kpi-head">
+            <span className="dash-kpi-label">
+              {canViewReports && finSummary ? `Sức khỏe cơ sở (${activeFinYear})` : 'Vận hành trong ngày'}
+            </span>
+            <span
+              className="dash-kpi-icon"
+              style={
+                canViewReports && finSummary?.warningCount > 0
+                  ? { background: '#FEF2F2', color: '#DC2626' }
+                  : { background: '#F0FDF4', color: '#15803D' }
+              }
+            >
+              <AlertTriangle size={17} />
+            </span>
+          </div>
+          <div
+            className="dash-kpi-value tabular-nums"
+            style={{
+              fontSize: canViewReports && finSummary ? '20px' : '22px',
+              color: canViewReports && finSummary?.warningCount > 0 ? '#DC2626' : '#111827',
+            }}
+          >
+            {loading
+              ? '…'
+              : canViewReports && finSummary
+                ? `${finSummary.negativeCount} âm · ${finSummary.lowOrZeroCount} lãi mỏng`
+                : `${stats.checkinsToday + stats.checkoutsToday} lượt`}
+          </div>
+          <div className="dash-kpi-sub">
+            {canViewReports && finSummary ? (
+              <>
+                {finSummary.profitableCount}/{finSummary.propertyCount} cơ sở có lãi · Quỹ thưởng {formatCompactVND(finSummary.estimatedTopBonusPool)}
+              </>
+            ) : (
+              `Nhận phòng ${stats.checkinsToday} · Trả phòng ${stats.checkoutsToday}`
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Thanh Vận hành hôm nay & Truy cập nhanh Báo cáo (1 dòng gọn) */}
+      <section className="dash-ops-strip" aria-label="Vận hành hôm nay và Báo cáo nhanh">
+        <div className="dash-ops-group">
+          <span className="dash-ops-chip">
+            <Clock size={13} style={{ color: '#16A34A' }} />
+            <span>Nhận phòng hôm nay:</span>
+            <strong className="tabular-nums">{displayValue(stats.checkinsToday)}</strong>
+          </span>
+          <span className="dash-ops-chip">
+            <CheckOutIcon size={13} style={{ color: '#0284C7' }} />
+            <span>Trả phòng hôm nay:</span>
+            <strong className="tabular-nums">{displayValue(stats.checkoutsToday)}</strong>
+          </span>
+          <Link to="/admin/bookings?status=PENDING" className="dash-ops-chip" style={{ textDecoration: 'none' }}>
+            <AlertCircle size={13} style={{ color: stats.pendingBookings > 0 ? '#D97706' : '#6B7280' }} />
+            <span>Chờ duyệt:</span>
+            <strong className="tabular-nums" style={{ color: stats.pendingBookings > 0 ? '#B45309' : '#111827' }}>
+              {displayValue(stats.pendingBookings)}
+            </strong>
+          </Link>
+        </div>
+
+        {canViewReports && (
+          <nav className="dash-ops-group" aria-label="Báo cáo chuyên sâu">
+            <Link to="/admin/reports/revenue" className="dash-ops-link primary">
+              <BarChart3 size={13} /> Thu – Chi (P&amp;L) <ArrowRight size={12} />
+            </Link>
+            {isAdmin && (
+              <Link to="/admin/reports/revenue?tab=bonus" className="dash-ops-link">
+                Top 3 &amp; Cảnh báo
+              </Link>
+            )}
+            <Link to="/admin/reports/revenue?tab=tet" className="dash-ops-link">
+              Lương T13
+            </Link>
+            <Link to="/admin/reports/bookings" className="dash-ops-link">
+              Đặt phòng
+            </Link>
+            <Link to="/admin/reports/occupancy" className="dash-ops-link">
+              Công suất phòng
+            </Link>
+          </nav>
+        )}
+      </section>
 
       {/* Primary Analytics Charts Row */}
       <div className="charts-grid">
@@ -302,7 +366,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Secondary Charts Row: Monthly Volume & Occupancy Rate */}
-      <div className="charts-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+      <div className="dash-charts-half">
         <div className="admin-card">
           <div className="admin-card-header">
             <div className="admin-card-title">Khối lượng đặt phòng hàng tháng</div>
@@ -333,7 +397,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Tables Row: Recent Bookings & Upcoming Check-ins */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+      <div className="dash-tables-split">
         {/* Recent Bookings Table */}
         <div className="admin-card">
           <div className="admin-card-header">

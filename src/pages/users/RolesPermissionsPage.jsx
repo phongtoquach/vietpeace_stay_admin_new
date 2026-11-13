@@ -1,5 +1,6 @@
 import ValidatedForm, { FieldError } from '../../components/forms/ValidatedForm';
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
@@ -60,11 +61,19 @@ function getMajorCity(locationName) {
 
 export default function RolesPermissionsPage() {
   const { showToast } = useAdmin();
+  const [searchParams] = useSearchParams();
+  const initialQuerySearch = searchParams.get('search') || '';
 
   const [accommodations, setAccommodations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [overviewError, setOverviewError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialQuerySearch);
+  const [prevQuerySearch, setPrevQuerySearch] = useState(initialQuerySearch);
+
+  if (initialQuerySearch !== prevQuerySearch) {
+    setPrevQuerySearch(initialQuerySearch);
+    if (initialQuerySearch) setSearchTerm(initialQuerySearch);
+  }
   const [cityFilter, setCityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'UNASSIGNED' | 'ASSIGNED'
 

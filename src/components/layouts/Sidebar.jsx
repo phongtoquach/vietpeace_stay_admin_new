@@ -39,11 +39,14 @@ export default function Sidebar() {
   const canViewReports = isAdmin || hasPermission('reports.view');
 
 
-  // Expanded menu sections state
+  const isRevenuePage = location.pathname.startsWith('/admin/reports/revenue');
+  const activeReportTab = new URLSearchParams(location.search).get('tab') || 'pnl';
+
+  // Expanded menu sections state (mặc định thu gọn toàn bộ mục con)
   const [expandedSections, setExpandedSections] = useState({
-    bookings: true,
-    accommodations: true,
-    pricing: true,
+    bookings: false,
+    accommodations: false,
+    pricing: false,
     reports: false,
     users: false,
     settings: false,
@@ -125,6 +128,66 @@ export default function Sidebar() {
           <LayoutDashboard size={16} className="sidebar-icon" />
           <span>Tổng quan</span>
         </NavLink>
+
+        {/* Tài chính & Báo cáo (Đưa lên nhóm Chính cạnh Tổng quan) */}
+        {canViewReports && (
+          <div>
+            <button
+              type="button"
+              className={`sidebar-item-parent ${
+                location.pathname.startsWith('/admin/reports') ? 'active-parent' : ''
+              }`}
+              onClick={() => toggleSection('reports')}
+              aria-expanded={expandedSections.reports}
+            >
+              <div className="sidebar-item-left">
+                <BarChart3 size={16} className="sidebar-icon" />
+                <span>Tài chính &amp; Báo cáo</span>
+              </div>
+              {expandedSections.reports ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+
+            {expandedSections.reports && (
+              <div className="sidebar-submenu">
+                <NavLink
+                  to="/admin/reports/revenue"
+                  end
+                  className={() =>
+                    `sidebar-sublink ${isRevenuePage && activeReportTab !== 'tet' ? 'active' : ''}`
+                  }
+                  onClick={closeMobile}
+                >
+                  Báo cáo Thu – Chi (P&amp;L)
+                </NavLink>
+                {isAdmin && (
+                  <NavLink
+                    to="/admin/reports/revenue?tab=tet"
+                    className={() =>
+                      `sidebar-sublink ${isRevenuePage && activeReportTab === 'tet' ? 'active' : ''}`
+                    }
+                    onClick={closeMobile}
+                  >
+                    Thưởng Top &amp; Lương T13
+                  </NavLink>
+                )}
+                <NavLink
+                  to="/admin/reports/bookings"
+                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
+                  onClick={closeMobile}
+                >
+                  Báo cáo đặt phòng
+                </NavLink>
+                <NavLink
+                  to="/admin/reports/occupancy"
+                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
+                  onClick={closeMobile}
+                >
+                  Công suất phòng
+                </NavLink>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Bookings Parent */}
         {canViewBookings && (
@@ -365,52 +428,8 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {(canViewReports || isAdmin) && (
-          <div className="sidebar-group-title">Thống kê & Quản trị</div>
-        )}
-
-        {/* Reports */}
-        {canViewReports && (
-          <div>
-            <button
-              type="button"
-              className={`sidebar-item-parent ${location.pathname.startsWith('/admin/reports') ? 'active-parent' : ''}`}
-              onClick={() => toggleSection('reports')}
-              aria-expanded={expandedSections.reports}
-            >
-              <div className="sidebar-item-left">
-                <BarChart3 size={16} className="sidebar-icon" />
-                <span>Báo cáo thống kê</span>
-              </div>
-              {expandedSections.reports ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
-
-            {expandedSections.reports && (
-              <div className="sidebar-submenu">
-                <NavLink
-                  to="/admin/reports/revenue"
-                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
-                  onClick={closeMobile}
-                >
-                  Báo cáo doanh thu
-                </NavLink>
-                <NavLink
-                  to="/admin/reports/bookings"
-                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
-                  onClick={closeMobile}
-                >
-                  Báo cáo đặt phòng
-                </NavLink>
-                <NavLink
-                  to="/admin/reports/occupancy"
-                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
-                  onClick={closeMobile}
-                >
-                  Công suất phòng
-                </NavLink>
-              </div>
-            )}
-          </div>
+        {isAdmin && (
+          <div className="sidebar-group-title">Quản trị hệ thống</div>
         )}
 
         {/* Admin Users & Roles (Chỉ Super Admin) */}
