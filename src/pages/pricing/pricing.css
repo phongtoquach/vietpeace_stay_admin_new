@@ -1,0 +1,213 @@
+.pricing-page{color:#203044}.pricing-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px}.pricing-heading h1{font-size:26px;margin:4px 0}.pricing-tabs{display:flex;gap:22px;border-bottom:1px solid #dbe2ea;margin-bottom:24px;overflow:auto}.pricing-tabs a{white-space:nowrap;color:#64748b;text-decoration:none;padding:12px 0;border-bottom:3px solid transparent}.pricing-tabs a.active{color:#906400;border-color:#efba29;font-weight:650}.pricing-toolbar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:16px;background:white;border:1px solid #dbe2ea;border-radius:9px;margin:16px 0}.pricing-toolbar.compact{padding:12px 16px}.pricing-page label,.pricing-dialog label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:500}.pricing-page select,.pricing-page input:not([type=checkbox]),.pricing-dialog select,.pricing-dialog input:not([type=checkbox]),.pricing-dialog textarea{border:1px solid #cad4df;border-radius:6px;background:#fff;min-height:38px;padding:8px 10px;color:#203044;max-width:100%;font:inherit}.pricing-property{display:block;margin-top:6px}.pricing-page .pricing-check,.pricing-dialog .pricing-check{display:flex;flex-direction:row;align-items:center;gap:8px;margin:12px 0}.pricing-muted{font-size:12px;color:#68788b;line-height:1.6}.pricing-message{padding:14px 18px;border-radius:7px;margin:12px 0}.pricing-message.error{background:#fff0ef;color:#a12626;border:1px solid #efc5c1}.pricing-message.success{background:#ecf8f0;color:#24613e;border:1px solid #bfdfc9}.pricing-scroll{overflow:auto;max-width:100%;border:1px solid #dbe2ea;border-radius:9px;background:white}.pricing-page table,.pricing-dialog table{border-collapse:separate;border-spacing:0;width:100%;font-size:12px}.pricing-page th,.pricing-page td,.pricing-dialog th,.pricing-dialog td{padding:12px;border-bottom:1px solid #e7ecf1;text-align:left;vertical-align:middle;white-space:nowrap}.pricing-page thead th,.pricing-dialog thead th{background:#f5f7fa;color:#526277;font-weight:600}.pricing-calendar{max-height:70vh}.pricing-calendar thead th{position:sticky;top:0;z-index:2;text-align:center;min-width:112px}.pricing-calendar thead th:first-child{z-index:4;text-align:left}.pricing-calendar th:first-child{position:sticky;left:0;z-index:3;min-width:215px;max-width:240px;background:white;white-space:normal;border-right:1px solid #dbe2ea}.pricing-calendar th small{display:block;color:#758397;font-weight:400;margin-top:5px}.pricing-calendar thead strong{display:block;margin-top:4px;font-size:14px}.pricing-calendar td{padding:0;border-right:1px solid #edf0f4}.pricing-cell{border:0;background:transparent;min-width:112px;width:100%;min-height:92px;cursor:pointer;text-align:center;padding:14px 8px;color:inherit}.pricing-cell strong,.pricing-cell span,.pricing-cell small{display:block;margin:3px 0}.pricing-cell strong{font-size:13px;font-variant-numeric:tabular-nums}.pricing-cell span{font-size:11px;color:#27704b}.pricing-cell:hover{box-shadow:inset 0 0 0 2px #dfb22e;background:#fffbea}.pricing-calendar .is-low{background:#fff9eb}.pricing-calendar .is-empty{background:#fff0ee}.pricing-calendar .is-closed span,.pricing-calendar .is-empty span{color:#9b4343}.pricing-calendar .is-past{opacity:.65}.pricing-calendar .is-today{background:#fff2c6}.pricing-section{margin:22px 0;padding:20px;background:white;border:1px solid #dbe2ea;border-radius:9px}.pricing-section h2{font-size:18px;margin:0 0 10px}.pricing-section-title{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}.pricing-section-title p{font-size:12px;color:#6b7c90;margin:0}.pricing-empty{text-align:center;padding:40px;color:#748298}.pricing-overlay{position:fixed;inset:0;z-index:100;background:#13223888;display:flex;align-items:center;justify-content:center;padding:24px}.pricing-dialog{background:white;border-radius:12px;padding:24px;width:min(600px,100%);max-height:90vh;overflow:auto;box-shadow:0 24px 90px #10203044}.pricing-dialog.wide{width:min(980px,100%)}.pricing-dialog>header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px}.pricing-dialog h2{font-size:20px;margin:0}.pricing-dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}.pricing-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:14px 0}.pricing-dialog fieldset{border:1px solid #dbe2ea;border-radius:7px;padding:14px;margin:16px 0}.pricing-dialog legend{font-size:12px;color:#526277;padding:0 6px}.pricing-checks{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.pricing-checks label{display:flex;flex-direction:row;align-items:center;gap:6px}.pricing-week-inputs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:18px 0}.pricing-dialog textarea{min-height:70px}.pricing-preview{background:#faf8f0;padding:16px;border-radius:8px;margin-top:18px}.pricing-preview h3{font-size:15px}.pricing-preview .pricing-scroll{max-height:280px}.pricing-breakdown{display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:14px}.pricing-breakdown dt{color:#68788b}.pricing-breakdown dd{margin:0;text-align:right}.pricing-log{padding:16px 0;border-bottom:1px solid #e4eaf0}.pricing-log>span{float:right;color:#748298;font-size:12px}.pricing-log p{margin:8px 0}.pricing-log summary{cursor:pointer;font-size:12px;margin-top:10px}.pricing-log pre{font-size:11px;max-height:300px;overflow:auto;background:#f6f8fa;padding:12px}.pricing-dialog button:focus-visible,.pricing-cell:focus-visible{outline:3px solid #d2a11a;outline-offset:2px}
+.pricing-toolbar-meta {
+  display: flex;
+  flex: 1 1 480px;
+  align-items: center;
+  align-self: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  min-height: 42px;
+}
+.pricing-date-navigation{display:flex;align-items:center;gap:8px;min-height:42px}
+.pricing-date-navigation .btn{min-height:42px;min-width:42px}
+.pricing-toolbar.pricing-calendar-toolbar{display:grid;grid-template-columns:minmax(220px,2fr) minmax(150px,1.1fr) minmax(110px,.8fr) minmax(190px,1.3fr) minmax(110px,.8fr);align-items:end;gap:16px;padding:20px}
+.pricing-calendar-toolbar>label,.pricing-calendar-toolbar>div{min-width:0}
+.pricing-calendar-toolbar>label input,.pricing-calendar-toolbar>label select{width:100%;min-height:42px}
+.pricing-calendar-toolbar>.btn{min-height:42px;display:flex;align-items:center;justify-content:center}
+.pricing-calendar-toolbar .pricing-date-navigation .btn:nth-child(2){flex:1}
+.pricing-calendar-toolbar .pricing-property{display:flex;align-items:center;min-height:42px;margin-top:6px}
+@media(max-width:1100px){.pricing-toolbar.pricing-calendar-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.pricing-calendar-toolbar .pricing-date-navigation{grid-column:span 2}}
+@media(max-width:700px){.pricing-toolbar.pricing-calendar-toolbar{grid-template-columns:1fr}.pricing-calendar-toolbar .pricing-date-navigation{grid-column:auto}}
+.pricing-toolbar.pricing-setup-toolbar{display:grid;grid-template-columns:minmax(200px,1fr) auto;gap:16px;align-items:end;padding:20px}
+.pricing-setup-toolbar>label{min-width:0}
+.pricing-setup-toolbar>label input,.pricing-setup-toolbar>label select{width:100%;min-height:42px}
+.pricing-setup-toolbar>.btn{min-height:42px;display:flex;align-items:center;justify-content:center}
+@media(max-width:700px){.pricing-toolbar.pricing-setup-toolbar{grid-template-columns:1fr}.pricing-setup-toolbar>label{min-width:0}}
+.pricing-period-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+}
+.pricing-toolbar.period-catalog-toolbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:end;padding:20px}
+.pricing-toolbar.period-catalog-toolbar--readonly{grid-template-columns:repeat(2,minmax(0,1fr))}
+.period-catalog-toolbar label{min-width:0}
+.period-create-button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:42px;width:100%}
+.period-catalog-table th,.period-catalog-table td{padding:17px 15px}
+.period-catalog-table th:first-child{width:24%;min-width:220px}
+.period-catalog-table tbody tr:hover{background:#fafcff}
+.period-catalog-name{display:block;font-size:14px;font-weight:650;color:#1e3554;white-space:normal;line-height:1.5}
+.period-time{display:inline-flex;align-items:center;gap:8px;font-size:12px;white-space:nowrap}
+.period-time i{height:8px;width:8px;border-radius:50%;flex-shrink:0}
+.period-time--upcoming i{background:#eab308}.period-time--ongoing i{background:#16a34a}.period-time--ended i{background:#94a3b8}
+.period-scope{color:#748298}.period-scope--applied{color:#285582;font-weight:500}
+.period-row-actions{display:flex;align-items:center;gap:8px}
+.period-row-actions button{display:inline-flex;align-items:center;gap:5px}
+.period-row-actions button:disabled{opacity:.4;cursor:not-allowed}
+.period-delete-button:not(:disabled){color:#b33131}
+@media(max-width:800px){.pricing-toolbar.period-catalog-toolbar{grid-template-columns:1fr;gap:16px}.period-catalog-table th:first-child{min-width:180px}}
+@media(max-width:600px){.pricing-period-dates{grid-template-columns:1fr}}
+.pricing-page .pricing-toolbar-meta .pricing-check {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  white-space: nowrap;
+}
+.pricing-legend {
+  display: flex;
+  margin-inline-start: 32px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: #68788b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.pricing-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.pricing-source-swatch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 5px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.pricing-cell {
+  position: relative;
+  padding-bottom: 22px;
+}
+.pricing-source-bar {
+  position: absolute;
+  inset-inline: 10px;
+  bottom: 6px;
+  height: 5px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.pricing-source--override { background: #7c3aed; }
+.pricing-source--period { background: #b45309; }
+.pricing-toolbar.pricing-history-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,1fr) auto;align-items:end;gap:24px;padding:20px}
+.pricing-history-toolbar>label{min-width:0}
+.pricing-history-toolbar select{width:100%;min-height:42px}
+.pricing-history-toolbar>.btn{min-height:42px}
+.pricing-history-dates{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(140px,1fr)) 2fr;align-items:end;gap:16px;padding-top:16px;border-top:1px solid #e4eaf0}
+.pricing-history-dates input{width:100%;min-height:42px}
+.pricing-history-log header{display:flex;justify-content:space-between;align-items:start;gap:20px}
+.pricing-history-log time{font-size:12px;color:#748298;white-space:nowrap}
+.pricing-history-property{font-size:13px;color:#526277;margin-top:6px}
+.pricing-history-log .pricing-muted{overflow-wrap:anywhere}
+.pricing-history-more{margin-top:20px}
+.pricing-value-input{position:relative;display:flex;align-items:center}
+.pricing-conflict-notice{background:#fff7df;border:1px solid #ecd290;border-radius:8px;padding:16px;margin-bottom:16px;color:#735300;line-height:1.6}
+.pricing-conflict-notice p{font-size:13px;margin:6px 0 0}
+.pricing-conflict-table{max-height:340px}
+.pricing-conflict-table thead th{position:sticky;top:0}
+.pricing-conflict-table td:first-child,.pricing-conflict-table td:nth-child(2){white-space:normal;min-width:150px}
+.pricing-conflict-pagination{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:12px 0;font-size:12px;color:#68788b}
+.pricing-form-grid.pricing-daily-fields{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
+@media(max-width:700px){.pricing-form-grid.pricing-daily-fields{grid-template-columns:1fr}}
+.pricing-value-input input{width:100%;padding-right:64px!important}
+.pricing-value-input span{position:absolute;right:12px;pointer-events:none;color:#738195;font-size:13px}
+.pricing-value-input input:disabled{background:#f4f6f8;color:#8b96a4}
+.pricing-locked-dates{opacity:.55}
+.pricing-locked-dates input:disabled{background:#f4f6f8}
+.pricing-room-scope-note{font-size:13px;color:#7a889a;line-height:1.7;margin:18px 0}
+.pricing-period-description>label{margin-bottom:6px}
+.pricing-description-box{display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:start;border:1px solid #cad4df;border-radius:6px;padding:6px;background:white}
+.pricing-page .pricing-description-box select{border:0;background:#f5f7fa;min-height:34px}
+.pricing-description-box textarea{width:100%;min-height:58px;border:0;resize:vertical;padding:8px;font:inherit;color:#203044;outline-offset:2px}
+.pricing-description-box:focus-within{border-color:#d2a11a}
+@media(max-width:600px){.pricing-description-box{grid-template-columns:1fr}}
+.pricing-toolbar.pricing-proposals-toolbar{display:grid;grid-template-columns:minmax(180px,1fr) minmax(170px,1fr) auto auto;gap:16px;padding:20px}
+.pricing-proposals-toolbar select{width:100%;min-height:42px}
+.pricing-proposals-toolbar>.btn{min-height:42px;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.pricing-page td.pricing-proposal-reason,.pricing-dialog .pricing-proposal-reason{white-space:pre-wrap;overflow-wrap:anywhere;max-width:360px;line-height:1.6}
+.pricing-proposal-status{display:inline-flex;border-radius:20px;padding:5px 10px;font-size:12px}
+.pricing-proposal-status--pending{background:#fff3cc;color:#8b6200}
+.pricing-proposal-status--approved{background:#e7f7ed;color:#24613e}
+.pricing-proposal-status--rejected{background:#fff0ef;color:#a12626}
+@media(max-width:800px){.pricing-toolbar.pricing-proposals-toolbar{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.pricing-toolbar.pricing-proposals-toolbar{grid-template-columns:1fr}}
+.pricing-dialog fieldset.pricing-change-fields{border:0;padding:0;margin:0;min-width:0}
+.pricing-bulk-scope{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}
+.pricing-scope-card{min-width:0}
+.pricing-scope-card.is-inactive .pricing-scope-mode{color:#8793a2}
+.pricing-dialog .pricing-scope-mode{display:flex;flex-direction:row;align-items:center;gap:8px;font-weight:600;cursor:pointer}
+.pricing-dialog .pricing-scope-mode input[type=radio]{min-height:0;padding:0;margin:0;width:14px;height:14px;flex-shrink:0}
+.pricing-dialog fieldset.pricing-scope-options{border:0;padding:0;margin:6px 0 0;min-width:0}
+.pricing-scope-options select{width:100%}
+.pricing-scope-options:disabled{opacity:.45}
+.pricing-property-checklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:4px}
+.pricing-dialog .pricing-property-checklist label{display:flex;flex-direction:row;align-items:start;gap:8px;line-height:1.5}
+.pricing-property-checklist input{margin-top:3px;flex-shrink:0}
+.pricing-scope-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:42px;width:100%;border:1px solid #cad4df;border-radius:6px;background:white;color:#203044;text-align:left;padding:8px 10px;font:inherit;font-size:13px;cursor:pointer}
+.pricing-scope-trigger span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pricing-scope-trigger:disabled{cursor:default;background:#f6f7f9}
+.pricing-scope-trigger[aria-expanded=true]{border-color:#d2a11a}
+.pricing-scope-panel{grid-column:1/-1;border:1px solid #dbe2ea;border-radius:8px;padding:16px;background:#fffdf7;min-width:0}
+.pricing-scope-panel>label select{width:100%}
+.pricing-city-groups{max-height:300px;overflow:auto;margin-top:14px}
+.pricing-dialog .pricing-city-groups h3{font-size:13px;margin:12px 0 8px;color:#526277}
+.pricing-city-groups>section:first-child h3{margin-top:0}
+.pricing-single-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-height:300px;overflow:auto}
+.pricing-single-options button{font:inherit;font-size:13px;text-align:left;min-height:42px;border:1px solid #dbe2ea;border-radius:6px;padding:8px 12px;background:white;color:#203044;cursor:pointer}
+.pricing-single-options button:first-child{grid-column:1/-1}
+.pricing-single-options button[aria-pressed=true],.pricing-single-options button:hover{background:#fff2c6;border-color:#d2a11a}
+.pricing-bulk-rooms{max-height:240px;overflow:auto}
+@media(max-width:700px){.pricing-bulk-scope,.pricing-single-options,.pricing-property-checklist{grid-template-columns:1fr}}
+@media(max-width:900px){.pricing-toolbar.pricing-history-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.pricing-history-toolbar>.btn{grid-column:1/-1}.pricing-history-dates{grid-template-columns:1fr 1fr}.pricing-history-dates p{grid-column:1/-1;margin:0}}
+@media(max-width:600px){.pricing-toolbar.pricing-history-toolbar{grid-template-columns:1fr;gap:16px;padding:16px}.pricing-history-dates{grid-template-columns:1fr}.pricing-history-log header{flex-direction:column;gap:8px}.pricing-toolbar.pricing-history-toolbar>label{min-width:0}}
+@media(max-width:1100px){.pricing-legend{margin-inline-start:0}}
+@media(max-width:800px){.pricing-heading,.pricing-section-title{align-items:flex-start;flex-direction:column}.pricing-tabs{gap:16px}.pricing-heading h1{font-size:22px}.pricing-overlay{padding:10px}.pricing-dialog{padding:16px}.pricing-form-grid{grid-template-columns:1fr}.pricing-week-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}.pricing-toolbar label{flex:1;min-width:130px}.pricing-toolbar-meta{flex-basis:100%;align-self:stretch}.pricing-calendar th:first-child{min-width:145px;max-width:145px}.pricing-log>span{float:none;display:block;margin-top:6px}}
+
+.pricing-weekly-table th small{display:block;margin-top:5px;color:#6b7c90;font-weight:400}
+.pricing-weekly-table th:not(:first-child),.pricing-weekly-table td:not(:first-child){text-align:center}
+.pricing-weekly-table .is-today{background:#fff4cf}
+.manager-pricing-options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0 0 20px}
+.manager-pricing-options>button{display:flex;align-items:center;gap:14px;padding:20px;text-align:left;background:#fff;border:1px solid #dbe2ea;border-radius:10px;color:#526277;font:inherit;cursor:pointer}
+.manager-pricing-options>button>svg{flex-shrink:0;color:#8a96a6}
+.manager-pricing-options strong{display:block;font-size:15px;color:#25384d;margin-bottom:6px}
+.manager-pricing-options small{display:block;font-size:13px;line-height:1.6}
+.manager-pricing-options i{width:18px;height:18px;box-sizing:border-box;border:1px solid #c6cfd9;border-radius:50%;margin-left:auto;flex-shrink:0}
+.manager-pricing-options>button.is-selected{border-color:#c39217;background:#fffdf5;box-shadow:0 0 0 1px #c39217}
+.manager-pricing-options>button.is-selected>svg{color:#a4770b}
+.manager-pricing-options>button.is-selected i{border:5px solid #b48410;background:#fff}
+.manager-pricing-rates{padding:0;overflow:hidden}
+.manager-pricing-rates>.pricing-section-title{padding:22px 22px 0;margin-bottom:16px}
+.manager-pricing .pricing-section-title p{font-size:13px;line-height:1.6;margin:7px 0 0;color:#6a7a8e}
+.manager-pricing-room-count{font-size:12px;background:#f0f3f7;padding:6px 10px;border-radius:20px;white-space:nowrap;color:#526277}
+.manager-pricing-table-help{margin:0;padding:0 22px 18px;font-size:13px;line-height:1.6;color:#68788c}
+.manager-pricing-selection-help:focus{outline:2px solid #c39217;outline-offset:-2px}
+.manager-pricing-selection-error{margin:0 22px 18px;padding:12px 14px;border:1px solid #efc5c1;border-radius:6px;background:#fff0ef;color:#a12626;font-size:13px;line-height:1.6}
+.manager-pricing-table{min-width:1000px}
+.manager-pricing-table .manager-pricing-room{text-align:left;min-width:230px;white-space:normal}
+.manager-pricing-room small{display:block;color:#7c899a;font-size:12px;font-weight:400;margin-top:7px}
+.manager-pricing-table .manager-pricing-select{min-width:48px;width:48px;text-align:center;padding-left:14px;padding-right:8px}
+.manager-pricing-select input[type=checkbox]{width:16px;height:16px;min-height:0;cursor:pointer;accent-color:#b48410}
+.manager-pricing-table tr.is-selected td{background:#fffdf4}
+.manager-pricing-table tr.is-selected td.is-today{background:#fff0bb}
+.manager-pricing-submit{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:18px 22px;border-top:1px solid #e3e8ef;background:#fafbfd}
+.manager-pricing-submit strong{font-size:14px;color:#2f4156}
+.manager-pricing-submit p{font-size:12px;color:#718096;line-height:1.6;margin:5px 0 0;overflow-wrap:anywhere}
+.manager-pricing-submit .btn{display:inline-flex;gap:12px;align-items:center;white-space:nowrap;min-height:42px}
+.manager-pricing-periods>summary{display:flex;align-items:center;gap:12px;cursor:pointer;font-weight:600;color:#34465b}
+.manager-pricing-periods>summary::before{content:'▸';color:#8c99a9}
+.manager-pricing-periods[open]>summary::before{content:'▾'}
+.manager-pricing-periods>summary small{margin-left:auto;font-weight:400;color:#7b8898;font-size:12px}
+.pricing-weekly-old,.pricing-weekly-new{margin:22px 0;padding:18px;border:1px solid #dbe2ea;border-radius:8px}
+.pricing-weekly-old{background:#f7f9fc}
+.pricing-weekly-new{background:#fffdf5;border-color:#ead79e}
+.pricing-weekly-old h3,.pricing-weekly-new h3{font-size:15px;margin:0 0 6px;color:#34465b}
+.pricing-weekly-old p,.pricing-weekly-new p{margin:0 0 14px}
+.pricing-weekly-comparison{table-layout:fixed;min-width:650px}
+.pricing-dialog .pricing-weekly-comparison th,.pricing-dialog .pricing-weekly-comparison td{text-align:center}
+.pricing-weekly-new .pricing-week-inputs{margin:14px 0 0}
+@media(max-width:850px){.manager-pricing-options{grid-template-columns:1fr}.manager-pricing-options>button{padding:16px}.manager-pricing-submit{align-items:stretch;flex-direction:column;gap:14px}.manager-pricing-submit .btn{justify-content:center}.manager-pricing-rates>.pricing-section-title{padding:16px 16px 0}.manager-pricing-table-help{padding:0 16px 16px}}
+
+.pricing-money-input input{padding-right:28px!important;min-width:0;font-variant-numeric:tabular-nums}

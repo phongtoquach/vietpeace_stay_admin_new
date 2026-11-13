@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { pricingPath } from '../../pages/pricing/pricingUtils';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import {
@@ -22,6 +23,7 @@ export default function Sidebar() {
   const { isSidebarOpen, isMobileSidebarOpen, setIsMobileSidebarOpen, bookings } = useAdmin();
   const { currentLoggedInUser, hasPermission } = useAuth();
   const location = useLocation();
+  const pricingLink = path => path === '/admin/pricing-history' ? path : pricingPath(path, new URLSearchParams(location.search).get('accId'));
 
   const isAdmin = currentLoggedInUser?.role === 'ADMIN';
   const isManager = currentLoggedInUser?.role === 'ACCOMMODATION_MANAGER';
@@ -31,7 +33,7 @@ export default function Sidebar() {
   const canViewOwnFacility = isAdmin || hasPermission('accommodations.read') || hasPermission('accommodations.update');
   const canViewRooms = isAdmin || hasPermission('rooms.read') || hasPermission('rooms.manage');
   const canViewAccommodationsGroup = canViewOwnFacility || canViewRooms;
-  const canViewPricing = isAdmin || hasPermission('pricing.read') || hasPermission('pricing.update');
+  const canViewPricing = isAdmin || hasPermission('pricing.read') || hasPermission('pricing.write');
   const canViewPromotions = isAdmin || hasPermission('promotions.read') || hasPermission('promotions.manage');
   const canViewCustomers = isAdmin || isManager || hasPermission('customers.read') || hasPermission('customers.manage');  
   const canViewReports = isAdmin || hasPermission('reports.view');
@@ -64,7 +66,9 @@ export default function Sidebar() {
     } else if (
       path.startsWith('/admin/rate-periods') ||
       path.startsWith('/admin/room-rates') ||
-      path.startsWith('/admin/room-availability')
+      path.startsWith('/admin/room-availability') ||
+      path.startsWith('/admin/pricing-history') ||
+      path.startsWith('/admin/pricing-proposals')
     ) {
       setExpandedSections((prev) => ({ ...prev, pricing: true }));
     } else if (path.startsWith('/admin/reports')) {
@@ -277,7 +281,9 @@ export default function Sidebar() {
               className={`sidebar-item-parent ${
                 location.pathname.startsWith('/admin/rate-periods') ||
                 location.pathname.startsWith('/admin/room-rates') ||
-                location.pathname.startsWith('/admin/room-availability')
+                location.pathname.startsWith('/admin/room-availability') ||
+                location.pathname.startsWith('/admin/pricing-history') ||
+                location.pathname.startsWith('/admin/pricing-proposals')
                   ? 'active-parent'
                   : ''
               }`}
@@ -294,7 +300,7 @@ export default function Sidebar() {
             {expandedSections.pricing && (
               <div className="sidebar-submenu">
                 <NavLink
-                  to="/admin/rate-periods"
+                  to={pricingLink('/admin/rate-periods')}
                   className={({ isActive }) =>
                     `sidebar-sublink ${isActive || location.pathname.startsWith('/admin/rate-periods') ? 'active' : ''}`
                   }
@@ -303,18 +309,32 @@ export default function Sidebar() {
                   Kỳ giá đặc biệt
                 </NavLink>
                 <NavLink
-                  to="/admin/room-rates"
+                  to={pricingLink('/admin/room-rates')}
                   className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
                   onClick={closeMobile}
                 >
-                  Bảng giá & Cấu hình giá
+                  Thiết lập giá
                 </NavLink>
                 <NavLink
-                  to="/admin/room-availability"
+                  to={pricingLink('/admin/room-availability')}
                   className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
                   onClick={closeMobile}
                 >
-                  Tình trạng phòng trống
+                  Lịch giá & phòng trống
+                </NavLink>
+                <NavLink
+                  to={pricingLink('/admin/pricing-history')}
+                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
+                  onClick={closeMobile}
+                >
+                  Lịch sử thay đổi
+                </NavLink>
+                <NavLink
+                  to={pricingLink('/admin/pricing-proposals')}
+                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
+                  onClick={closeMobile}
+                >
+                  Đề xuất giá
                 </NavLink>
               </div>
             )}

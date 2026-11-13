@@ -633,6 +633,22 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .top-header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .header-left {
+    min-width: 0;
+    gap: 8px;
+  }
+  .header-right {
+    flex-shrink: 0;
+    gap: 8px;
+  }
+  .header-search,
+  .header-user-name {
+    display: none;
+  }
   .sidebar {
     position: fixed;
     left: -260px;

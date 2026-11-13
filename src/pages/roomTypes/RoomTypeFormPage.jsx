@@ -1,3 +1,4 @@
+import ValidatedForm, { FieldError } from '../../components/forms/ValidatedForm.jsx';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import PageHeader from '../../components/common/PageHeader.jsx';
@@ -706,6 +707,15 @@ export default function RoomTypeFormPage() {
     }
 
     const payload = toRoomTypeWritePayload(formData, weekdayRates);
+    if (!isAdmin) {
+      for (const field of ['basePrice', 'extraAdultFee', 'extraChildFee', 'weekdayRates']) delete payload[field];
+      if (!isEdit) {
+        setErrors({
+          form: 'Giá ban đầu của loại phòng mới cần admin thiết lập. Vui lòng liên hệ admin để tạo loại phòng.'
+        });
+        return;
+      }
+    }
 
     // Create luôn tạo bản nháp; đổi trạng thái do trang Sửa đảm nhận
     // (đồng bộ pattern AccommodationFormPage.toApiCreatePayload).
@@ -895,7 +905,7 @@ export default function RoomTypeFormPage() {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <ValidatedForm onSubmit={handleSubmit}>
         {/* Tab 1: Thông tin tổng quan loại phòng */}
         {activeTab === 'general' && (
           <div className="admin-card">
@@ -961,6 +971,7 @@ export default function RoomTypeFormPage() {
                 <FormInput
                   label="Giá gốc theo đêm (VNĐ)"
                   name="base_price"
+                  disabled={!isAdmin}
                   type="text"
                   inputMode="numeric"
                   value={formData.base_price}
@@ -1098,6 +1109,7 @@ export default function RoomTypeFormPage() {
                   <FormInput
                     label="Phụ phí người lớn thêm (VNĐ/đêm)"
                     name="extra_adult_fee"
+                    disabled={!isAdmin}
                     type="number"
                     min="0"
                     step="50000"
@@ -1114,6 +1126,7 @@ export default function RoomTypeFormPage() {
                   <FormInput
                     label="Phụ phí trẻ em thêm (VNĐ/đêm)"
                     name="extra_child_fee"
+                    disabled={!isAdmin}
                     type="number"
                     min="0"
                     step="50000"
@@ -1133,6 +1146,15 @@ export default function RoomTypeFormPage() {
         )}
 
         {/* Tab 3: Bảng giá 7 ngày trong tuần */}
+        {!isAdmin && (
+          <p className="admin-card" style={{ padding: 16 }}>
+            Giá và phụ thu tại trang này chỉ để xem.{' '}
+            <Link to={`/admin/room-rates?accId=${formData.accommodation_id}`}>
+              Đề xuất giá phòng tại Thiết lập giá
+            </Link>
+            , kèm lý do và chờ admin duyệt. Phụ thu và giá ban đầu của loại phòng mới do admin thiết lập.
+          </p>
+        )}
         {activeTab === 'pricing' && (
           <div className="admin-card">
             <div
@@ -1148,12 +1170,16 @@ export default function RoomTypeFormPage() {
               <div>
                 <div className="admin-card-title">Bảng giá 7 ngày trong tuần (room_weekday_rates)</div>
                 <div style={{ fontSize: '12px', color: '#6B7280' }}>
-                  Mỗi loại phòng có đúng 1 mức giá cố định cho từng ngày trong tuần (1 = Thứ Hai ... 7 = Chủ Nhật).
+                  Giá tuần ban đầu (Thứ Hai đến Chủ Nhật). Khi đã có lịch tuần theo ngày hiệu lực, lịch mới được ưu tiên áp dụng.{' '}
+                  <Link to={`/admin/room-rates?accId=${formData.accommodation_id}`}>
+                    Quản lý lịch giá và kỳ đặc biệt
+                  </Link>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button
                   type="button"
+                  disabled={!isAdmin}
                   className="btn btn-secondary btn-sm"
                   onClick={() => {
                     const base = Number(formData.base_price) || 1000000;
@@ -1241,11 +1267,15 @@ export default function RoomTypeFormPage() {
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <FieldError name={`field-43256-${d?.id ?? d?.day ?? d}`} />
                         <input
                           type="number"
+                          disabled={!isAdmin}
                           step="50000"
                           min="0"
                           className="form-input"
+                          name={`field-43256-${d?.id ?? d?.day ?? d}`}
+                          data-validation-label="Giá theo đêm (VNĐ)"
                           value={val}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -1288,7 +1318,13 @@ export default function RoomTypeFormPage() {
                   borderRadius: '4px'
                 }}
               >
-                * Mức giá cấu hình tại đây sẽ được lưu trữ trực tiếp vào bảng <code>room_weekday_rates</code> và làm giá mặc định khi bán phòng cho từng thứ trong tuần.
+                {isAdmin ? (
+                  <>
+                    * Mức giá cấu hình tại đây sẽ được lưu trữ trực tiếp vào bảng <code>room_weekday_rates</code> và làm giá mặc định khi bán phòng cho từng thứ trong tuần.
+                  </>
+                ) : (
+                  'Giá giữ nguyên khi đề xuất đang chờ duyệt hoặc bị từ chối.'
+                )}
               </div>
             </div>
           </div>
@@ -1819,7 +1855,7 @@ export default function RoomTypeFormPage() {
                   : 'Tạo loại phòng'}
           </button>
         </div>
-      </form>
+      </ValidatedForm>
     </div>
   );
 }

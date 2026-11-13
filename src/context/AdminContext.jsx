@@ -13,8 +13,6 @@ import { bookingsApi } from '../api/bookings.js';
 import { useAuth } from './AuthContext.jsx';
 import {
   INITIAL_ROOM_WEEKDAY_RATES,
-  INITIAL_RATE_PERIODS,
-  INITIAL_ROOM_RATES,
   INITIAL_PROMOTIONS,
   INITIAL_CUSTOMERS,
   INITIAL_ADMIN_USERS,
@@ -77,8 +75,6 @@ export function AdminProvider({ children }) {
     total: 0,
     totalPages: 0
   });
-  const [ratePeriods, setRatePeriods] = useState(INITIAL_RATE_PERIODS);
-  const [roomRates, setRoomRates] = useState(INITIAL_ROOM_RATES);
   const [promotions, setPromotions] = useState(INITIAL_PROMOTIONS);
   const [customers, setCustomers] = useState(INITIAL_CUSTOMERS);
   const [adminUsers, setAdminUsers] = useState(INITIAL_ADMIN_USERS);
@@ -503,72 +499,6 @@ export function AdminProvider({ children }) {
     showToast('Đã xóa khách hàng.', 'info');
   };
 
-  // Rate Periods (rate_periods SQL Table - independent master periods)
-  const addRatePeriod = (data) => {
-    if (!data.name?.trim()) {
-      showToast('Tên kỳ giá đặc biệt là bắt buộc.', 'error');
-      return false;
-    }
-    if (!data.start_date || !data.end_date) {
-      showToast('Ngày bắt đầu và ngày kết thúc là bắt buộc.', 'error');
-      return false;
-    }
-    if (new Date(data.end_date) <= new Date(data.start_date)) {
-      showToast('Ngày kết thúc phải lớn hơn ngày bắt đầu.', 'error');
-      return false;
-    }
-
-    const newId = Math.max(...ratePeriods.map((r) => r.id), 0) + 1;
-    const nowTimestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const newPeriod = {
-      id: newId,
-      name: data.name.trim(),
-      start_date: data.start_date,
-      end_date: data.end_date,
-      description: data.description || '',
-      status: (data.status || 'ACTIVE').toUpperCase(),
-      created_at: nowTimestamp,
-      updated_at: nowTimestamp
-    };
-    setRatePeriods((prev) => [...prev, newPeriod]);
-    showToast(`Đã thêm kỳ giá đặc biệt "${newPeriod.name}".`);
-    return newPeriod;
-  };
-
-  const updateRatePeriod = (id, data) => {
-    if (data.start_date && data.end_date && new Date(data.end_date) <= new Date(data.start_date)) {
-      showToast('Ngày kết thúc phải lớn hơn ngày bắt đầu.', 'error');
-      return false;
-    }
-
-    const nowTimestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    setRatePeriods((prev) =>
-      prev.map((r) =>
-        r.id === Number(id)
-          ? {
-            ...r,
-            name: data.name !== undefined ? data.name.trim() : r.name,
-            start_date: data.start_date !== undefined ? data.start_date : r.start_date,
-            end_date: data.end_date !== undefined ? data.end_date : r.end_date,
-            description: data.description !== undefined ? data.description : r.description,
-            status: data.status ? data.status.toUpperCase() : r.status,
-            updated_at: nowTimestamp
-          }
-          : r
-      )
-    );
-    showToast('Đã cập nhật kỳ giá đặc biệt.');
-    return true;
-  };
-
-  const deleteRatePeriod = (id) => {
-    setRatePeriods((prev) => prev.filter((r) => r.id !== Number(id)));
-    // Also remove associated period rates
-    setRoomRates((prev) => prev.filter((r) => r.rate_period_id !== Number(id)));
-    showToast('Đã xóa kỳ giá đặc biệt.', 'info');
-    return true;
-  };
-
   // Room Weekday Rates (room_weekday_rates SQL Table)
   const getRoomWeekdayRates = (roomTypeId) => {
     const existing = roomWeekdayRates.filter((r) => r.room_type_id === Number(roomTypeId));
@@ -631,149 +561,6 @@ export function AdminProvider({ children }) {
       showToast('Weekday & weekend room rates updated successfully.');
     }
     return true;
-  };
-
-  // Special Rate Period Configurations (rate_period_items SQL Table)
-  // columns: id, rate_period_id, accommodation_id, room_type_id, adjustment_type, adjustment_value, price, status, created_at, updated_at
-  const saveRatePeriodRoomConfig = (ratePeriodId, roomTypeId, accommodationId, adjustmentType, adjustmentValue) => {
-    const pId = Number(ratePeriodId);
-    const rId = Number(roomTypeId);
-    const accId = Number(accommodationId);
-    const adjType = adjustmentType || 'FIXED';
-    const adjVal = Number(adjustmentValue);
-    const room = roomTypes.find((r) => r.id === rId);
-    const basePrice = Number(room?.base_price) || 0;
-
-    let calculatedPrice = adjVal;
-    if (adjType === 'PERCENT_INCREASE') {
-      calculatedPrice = Math.round(basePrice * (1 + adjVal / 100));
-    } else if (adjType === 'PERCENT_DECREASE') {
-      calculatedPrice = Math.max(0, Math.round(basePrice * (1 - adjVal / 100)));
-    } else if (adjType === 'AMOUNT_INCREASE') {
-      calculatedPrice = basePrice + adjVal;
-    } else if (adjType === 'AMOUNT_DECREASE') {
-      calculatedPrice = Math.max(0, basePrice - adjVal);
-    }
-
-    const nowTimestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-    setRoomRates((prev) => {
-      const matchIndex = prev.findIndex((item) => item.rate_period_id === pId && item.room_type_id === rId);
-      if (matchIndex >= 0) {
-        return prev.map((item, idx) =>
-          idx === matchIndex
-            ? {
-              ...item,
-              accommodation_id: accId,
-              adjustment_type: adjType,
-              adjustment_value: adjVal,
-              price: calculatedPrice,
-              updated_at: nowTimestamp
-            }
-            : item
-        );
-      } else {
-        const newId = Math.max(...prev.map((item) => item.id), 0) + 1;
-        const newItem = {
-          id: newId,
-          accommodation_id: accId,
-          rate_period_id: pId,
-          room_type_id: rId,
-          adjustment_type: adjType,
-          adjustment_value: adjVal,
-          price: calculatedPrice,
-          status: 'ACTIVE',
-          created_at: nowTimestamp,
-          updated_at: nowTimestamp
-        };
-        return [...prev, newItem];
-      }
-    });
-
-    showToast('Lưu cấu hình giá thành công.');
-    return true;
-  };
-
-  const bulkSaveRatePeriodRoomConfig = (ratePeriodId, accommodationId, adjustmentType, adjustmentValue) => {
-    const pId = Number(ratePeriodId);
-    const accId = Number(accommodationId);
-    const adjType = adjustmentType || 'FIXED';
-    const adjVal = Number(adjustmentValue);
-
-    const targetRooms = roomTypes.filter((r) => String(r.accommodation_id) === String(accId));
-    if (targetRooms.length === 0) {
-      showToast('Cơ sở lưu trú này chưa có loại phòng nào.', 'warning');
-      return false;
-    }
-
-    const nowTimestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-
-    setRoomRates((prev) => {
-      let nextList = [...prev];
-      let maxId = Math.max(...nextList.map((item) => item.id), 0);
-
-      targetRooms.forEach((room) => {
-        const basePrice = Number(room.base_price) || 0;
-        let calculatedPrice = adjVal;
-        if (adjType === 'PERCENT_INCREASE') {
-          calculatedPrice = Math.round(basePrice * (1 + adjVal / 100));
-        } else if (adjType === 'PERCENT_DECREASE') {
-          calculatedPrice = Math.max(0, Math.round(basePrice * (1 - adjVal / 100)));
-        } else if (adjType === 'AMOUNT_INCREASE') {
-          calculatedPrice = basePrice + adjVal;
-        } else if (adjType === 'AMOUNT_DECREASE') {
-          calculatedPrice = Math.max(0, basePrice - adjVal);
-        }
-
-        const matchIndex = nextList.findIndex((item) => item.rate_period_id === pId && item.room_type_id === room.id);
-        if (matchIndex >= 0) {
-          nextList[matchIndex] = {
-            ...nextList[matchIndex],
-            accommodation_id: accId,
-            adjustment_type: adjType,
-            adjustment_value: adjVal,
-            price: calculatedPrice,
-            updated_at: nowTimestamp
-          };
-        } else {
-          maxId += 1;
-          nextList.push({
-            id: maxId,
-            accommodation_id: accId,
-            rate_period_id: pId,
-            room_type_id: room.id,
-            adjustment_type: adjType,
-            adjustment_value: adjVal,
-            price: calculatedPrice,
-            status: 'ACTIVE',
-            created_at: nowTimestamp,
-            updated_at: nowTimestamp
-          });
-        }
-      });
-
-      return nextList;
-    });
-
-    showToast('Đã lưu cấu hình chung cho tất cả loại phòng.');
-    return true;
-  };
-
-  const setRatePeriodItemPrice = (ratePeriodId, roomTypeId, accommodationId, price) => {
-    return saveRatePeriodRoomConfig(ratePeriodId, roomTypeId, accommodationId, 'FIXED', price);
-  };
-
-  const removeRatePeriodItem = (ratePeriodId, roomTypeId) => {
-    const pId = Number(ratePeriodId);
-    const rId = Number(roomTypeId);
-    setRoomRates((prev) => prev.filter((item) => !(item.rate_period_id === pId && item.room_type_id === rId)));
-    showToast('Đã gỡ cấu hình giá cho loại phòng.', 'info');
-    return true;
-  };
-
-  const updateRoomRate = (id, price) => {
-    setRoomRates((prev) => prev.map((r) => (r.id === Number(id) ? { ...r, price: Number(price) } : r)));
-    showToast('Cập nhật giá thành công.');
   };
 
   // Users & Roles
@@ -846,16 +633,6 @@ export function AdminProvider({ children }) {
         approveBooking,
         checkInBooking,
         checkOutBooking,
-        ratePeriods,
-        addRatePeriod,
-        updateRatePeriod,
-        deleteRatePeriod,
-        roomRates,
-        updateRoomRate,
-        saveRatePeriodRoomConfig,
-        bulkSaveRatePeriodRoomConfig,
-        setRatePeriodItemPrice,
-        removeRatePeriodItem,
         roomWeekdayRates,
         getRoomWeekdayRates,
         updateRoomWeekdayRates,

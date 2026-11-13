@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 const AuthContext = createContext();
 
-const API_URL = "http://localhost:3002/api/admin";
+const API_URL = import.meta.env.VITE_ADMIN_API_BASE_URL || 'http://localhost:3002/api/admin';
 
 export function AuthProvider({ children }) {
 

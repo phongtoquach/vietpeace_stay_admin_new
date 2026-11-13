@@ -41,6 +41,8 @@ import RatePeriodsPage from './pages/pricing/RatePeriodsPage.jsx';
 import RatePeriodFormPage from './pages/pricing/RatePeriodFormPage.jsx';
 import RoomRatesPage from './pages/pricing/RoomRatesPage.jsx';
 import RoomAvailabilityPage from './pages/pricing/RoomAvailabilityPage.jsx';
+import PricingWorkspace from './pages/pricing/PricingWorkspace.jsx';
+import PricingProposalsPage from './pages/pricing/PricingProposalsPage.jsx';
 
 // Promotions
 import PromotionsPage from './pages/promotions/PromotionsPage.jsx';
@@ -144,6 +146,8 @@ export default function App() {
 						<Route path="rate-periods/:id/edit" element={<RatePeriodFormPage />} />
 						<Route path="room-rates" element={<RoomRatesPage />} />
 						<Route path="room-availability" element={<RoomAvailabilityPage />} />
+						<Route path="pricing-history" element={<PricingWorkspace mode="history" />} />
+						<Route path="pricing-proposals" element={<PricingProposalsPage />} />
 
 						{/* Promotions */}
 						<Route path="promotions" element={<PromotionsPage />} />

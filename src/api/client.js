@@ -1,5 +1,5 @@
 // API admin dùng chung cho toàn bộ Admin Panel.
-const API_BASE = "http://localhost:3002/api/admin";
+const API_BASE = import.meta.env.VITE_ADMIN_API_BASE_URL || 'http://localhost:3002/api/admin';
 
 export async function apiFetch(path, options = {}) {
   const requestUrl = `${API_BASE}${path}`;
