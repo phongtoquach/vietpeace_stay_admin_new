@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import AuthContext from '../../context/AuthContext';
 import { useAdmin } from '../../context/AdminContext.jsx';
+import { useAdminChat } from '../../chat/ChatContext.jsx';
 
 import Breadcrumb from '../common/Breadcrumb.jsx';
 import {
@@ -31,6 +32,9 @@ export default function Header({ breadcrumbItems = [] }) {
   } = useAdmin();
 
   const { currentLoggedInUser, logout } = useContext(AuthContext);
+  const { isAdmin: isChatAdmin, waitingCount, internalUnread, reportsBadge, pendingHandoffAlerts } = useAdminChat();
+  const isAdmin = currentLoggedInUser?.role === 'ADMIN' || isChatAdmin;
+  const totalNotifs = waitingCount + internalUnread + (isAdmin ? reportsBadge : 0);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -125,8 +129,6 @@ export default function Header({ breadcrumbItems = [] }) {
     currentLoggedInUser?.fullName ||
     currentLoggedInUser?.displayName ||
     'Quản trị viên';
-
-  const isAdmin = currentLoggedInUser?.role === 'ADMIN';
 
   return (
     <>
@@ -271,13 +273,13 @@ export default function Header({ breadcrumbItems = [] }) {
               title="Thông báo hệ thống"
             >
               <Bell size={16} />
-              <span className="notification-badge" />
+              {totalNotifs > 0 && <span className="notification-badge" />}
             </button>
 
             {notificationsOpen && (
               <div
                 className="header-user-dropdown"
-                style={{ width: '290px', right: 0 }}
+                style={{ width: '310px', right: 0 }}
               >
                 <div
                   style={{
@@ -291,42 +293,94 @@ export default function Header({ breadcrumbItems = [] }) {
                   }}
                 >
                   <span>Thông báo hệ thống</span>
-                  <span className="badge badge-warning">2 Chưa đọc</span>
+                  <span className="badge badge-warning">{totalNotifs} Mới</span>
                 </div>
-                <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
-                  <div
-                    style={{
-                      padding: '8px 14px',
-                      borderBottom: '1px solid #F3F4F6',
-                      fontSize: '12px',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, color: '#292D32' }}>
-                      Đơn đặt phòng mới chờ xử lý
+                <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                  {totalNotifs === 0 ? (
+                    <div style={{ padding: '14px', fontSize: '12px', color: '#6B7280', textAlign: 'center' }}>
+                      Không có thông báo chat hoặc cảnh báo mới.
                     </div>
-                    <div style={{ color: '#6B7280', marginTop: '2px' }}>
-                      Khách hàng Lê Hoàng Long vừa đặt Biệt thự có hồ bơi (Phú Quốc).
-                    </div>
-                    <div style={{ fontSize: '10.5px', color: '#9CA3AF', marginTop: '3px' }}>
-                      30 phút trước
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      padding: '8px 14px',
-                      fontSize: '12px',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, color: '#292D32' }}>
-                      Nhận phòng thành công
-                    </div>
-                    <div style={{ color: '#6B7280', marginTop: '2px' }}>
-                      Trần Thị Mai đã nhận phòng 302 (Hanoi Heritage).
-                    </div>
-                    <div style={{ fontSize: '10.5px', color: '#9CA3AF', marginTop: '3px' }}>
-                      2 giờ trước
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      {waitingCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotificationsOpen(false);
+                            navigate('/admin/chat');
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '10px 14px',
+                            border: 'none',
+                            borderBottom: '1px solid #F3F4F6',
+                            background: '#FFFBEB',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: '#92400E' }}>
+                            {waitingCount} khách hàng đang chờ Quản lý tiếp nhận
+                          </div>
+                          <div style={{ color: '#6B7280', marginTop: '2px' }}>
+                            {pendingHandoffAlerts[0]?.accommodationName || 'Vui lòng tiếp nhận trong 5 phút.'}
+                          </div>
+                        </button>
+                      )}
+                      {internalUnread > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotificationsOpen(false);
+                            navigate('/admin/chat/internal');
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '10px 14px',
+                            border: 'none',
+                            borderBottom: '1px solid #F3F4F6',
+                            background: '#FFFFFF',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: '#292D32' }}>
+                            {internalUnread} tin nhắn Chat nội bộ chưa đọc
+                          </div>
+                          <div style={{ color: '#6B7280', marginTop: '2px' }}>
+                            Nhấn để mở trao đổi với ban quản trị / đồng nghiệp.
+                          </div>
+                        </button>
+                      )}
+                      {isAdmin && reportsBadge > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotificationsOpen(false);
+                            navigate('/admin/chat/reports');
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '10px 14px',
+                            border: 'none',
+                            background: '#FFF1F2',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: '#9F1239' }}>
+                            {reportsBadge} cảnh báo CSKH / Quản lý bỏ lỡ 5 phút
+                          </div>
+                          <div style={{ color: '#6B7280', marginTop: '2px' }}>
+                            Xem ngay tại mục Báo cáo chat.
+                          </div>
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             )}

@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { pricingPath } from '../../pages/pricing/pricingUtils';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useAdminChat } from '../../chat/ChatContext.jsx';
 import {
   LayoutDashboard,
   CalendarCheck,
@@ -17,11 +18,15 @@ import {
   ChevronDown,
   ChevronRight,
   Hotel,
+  MessageSquare,
+  MessagesSquare,
+  ShieldAlert,
 } from 'lucide-react';
 
 export default function Sidebar() {
   const { isSidebarOpen, isMobileSidebarOpen, setIsMobileSidebarOpen, bookings } = useAdmin();
   const { currentLoggedInUser, hasPermission } = useAuth();
+  const { waitingCount, internalUnread, reportsBadge } = useAdminChat();
   const location = useLocation();
   const pricingLink = path => path === '/admin/pricing-history' ? path : pricingPath(path, new URLSearchParams(location.search).get('accId'));
 
@@ -426,6 +431,51 @@ export default function Sidebar() {
             <Users size={16} className="sidebar-icon" />
             <span>Khách hàng</span>
           </NavLink>
+        )}
+
+        {/* Hỗ trợ & Chat */}
+        {(isAdmin || hasPermission('chat.conversation.read') || hasPermission('chat.internal.read')) && (
+          <>
+            <div className="sidebar-group-title">Hỗ trợ &amp; Chat</div>
+            {(isAdmin || hasPermission('chat.conversation.read')) && (
+              <NavLink
+                to="/admin/chat"
+                end
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+                onClick={closeMobile}
+              >
+                <MessageSquare size={16} className="sidebar-icon" />
+                <span>Tư vấn khách hàng</span>
+                {waitingCount > 0 && <span className="sidebar-badge">{waitingCount}</span>}
+              </NavLink>
+            )}
+            {(isAdmin || hasPermission('chat.internal.read')) && (
+              <NavLink
+                to="/admin/chat/internal"
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+                onClick={closeMobile}
+              >
+                <MessagesSquare size={16} className="sidebar-icon" />
+                <span>Chat nội bộ</span>
+                {internalUnread > 0 && <span className="sidebar-badge">{internalUnread}</span>}
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink
+                to="/admin/chat/reports"
+                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+                onClick={closeMobile}
+              >
+                <ShieldAlert size={16} className="sidebar-icon" />
+                <span>Báo cáo chat</span>
+                {reportsBadge > 0 && (
+                  <span className="sidebar-badge" style={{ backgroundColor: '#DC2626', color: '#FFFFFF' }}>
+                    {reportsBadge}
+                  </span>
+                )}
+              </NavLink>
+            )}
+          </>
         )}
 
         {isAdmin && (

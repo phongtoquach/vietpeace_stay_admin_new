@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AdminProvider } from './context/AdminContext.jsx';
+import { AdminChatProvider } from './chat/ChatContext.jsx';
 
 import AdminLayout from './components/layouts/AdminLayout.jsx';
 
@@ -65,6 +66,9 @@ import OccupancyReportPage from './pages/reports/OccupancyReportPage.jsx';
 // Settings
 import GeneralSettingsPage from './pages/settings/GeneralSettingsPage.jsx';
 import WebsiteSettingsPage from './pages/settings/WebsiteSettingsPage.jsx';
+import ChatOperations from './chat/ChatOperations.jsx';
+import InternalChatPage from './chat/InternalChatPage.jsx';
+import ChatReportsPage from './chat/ChatReportsPage.jsx';
 
 function AdminOnlyRoute({ children }) {
 	const { currentLoggedInUser } = useAuth();
@@ -102,7 +106,8 @@ export default function App() {
 	return (
 		<AuthProvider>
 			<AdminProvider>
-				<Routes>
+				<AdminChatProvider>
+					<Routes>
 					{/* Public Auth Routes */}
 					<Route path="/login" element={<LoginPage />} />
 					<Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -185,11 +190,17 @@ export default function App() {
 						{/* Settings (Chỉ Super Admin) */}
 						<Route path="settings/general" element={<AdminOnlyRoute><GeneralSettingsPage /></AdminOnlyRoute>} />
 						<Route path="settings/website" element={<AdminOnlyRoute><WebsiteSettingsPage /></AdminOnlyRoute>} />
+
+						{/* Hỗ trợ & Chat AI / Quản lý / Nội bộ / Báo cáo */}
+						<Route path="chat" element={<PermissionRoute permission="chat.conversation.read"><ChatOperations /></PermissionRoute>} />
+						<Route path="chat/internal" element={<PermissionRoute permission="chat.internal.read"><InternalChatPage /></PermissionRoute>} />
+						<Route path="chat/reports" element={<AdminOnlyRoute><ChatReportsPage /></AdminOnlyRoute>} />
 					</Route>
 
 					{/* Fallback route */}
 					<Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-				</Routes>
+					</Routes>
+				</AdminChatProvider>
 			</AdminProvider>
 		</AuthProvider>
   );

@@ -1,0 +1,892 @@
+.vps-admin-chat-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vps-admin-chat-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.vps-admin-chat-nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--color-content-bg);
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid #E5E7EB;
+}
+
+.vps-admin-chat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  min-height: 36px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4B5563;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.vps-admin-chat-tab:hover {
+  background: #F3F4F6;
+  color: var(--color-primary-text);
+}
+
+.vps-admin-chat-tab.active {
+  background: var(--color-primary-yellow);
+  color: #1F2937;
+}
+
+.vps-tab-badge {
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 6px;
+  border-radius: 999px;
+  background: #1F2937;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+}
+
+.vps-tab-badge--warn {
+  background: #D97706;
+}
+
+.vps-tab-badge--danger {
+  background: #DC2626;
+}
+
+.vps-urgent-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #FFFBEB;
+  border: 1px solid #F59E0B;
+  color: #92400E;
+}
+
+.vps-urgent-text {
+  flex: 1;
+  font-size: 13.5px;
+}
+
+.vps-dismiss-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  min-width: 28px;
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+}
+
+.vps-chat-workspace {
+  display: grid;
+  grid-template-columns: 330px 1fr;
+  height: calc(100vh - 200px);
+  min-height: 540px;
+  background: var(--color-content-bg);
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+
+.vps-chat-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-inline-end: 1px solid #E5E7EB;
+  background: #FAFAFB;
+  min-height: 0;
+}
+
+.vps-sidebar-filters {
+  padding: 12px;
+  border-bottom: 1px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #FFFFFF;
+}
+
+.vps-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  background: #F9FAFB;
+}
+
+.vps-search-box input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  outline: none;
+}
+
+.vps-accom-select {
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  font-size: 12.5px;
+  background: #FFFFFF;
+}
+
+.vps-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vps-filter-pill {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid #D1D5DB;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vps-filter-pill.active {
+  background: #1F2937;
+  color: #FFFFFF;
+  border-color: #1F2937;
+}
+
+.vps-thread-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vps-list-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6B7280;
+  padding: 6px 6px 2px;
+}
+
+.vps-thread-item {
+  width: 100%;
+  text-align: left;
+  padding: 10px 11px;
+  border-radius: 10px;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vps-thread-item.waiting {
+  border-color: #F59E0B;
+  background: #FFFBEB;
+}
+
+.vps-thread-item.active {
+  border-color: var(--color-primary-yellow);
+  box-shadow: inset 3px 0 0 var(--color-primary-yellow);
+  background: #FEF9E7;
+}
+
+.vps-thread-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-primary-text);
+}
+
+.vps-thread-item-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #6B7280;
+}
+
+.vps-thread-item-preview {
+  font-size: 12px;
+  color: #4B5563;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vps-contact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed #D1D5DB;
+  background: #FFFFFF;
+  cursor: pointer;
+}
+
+.vps-contact-item:hover {
+  border-style: solid;
+  border-color: var(--color-primary-yellow);
+}
+
+.vps-contact-item div {
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+}
+
+.vps-contact-item small {
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.vps-unread-dot {
+  min-width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: #DC2626;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  padding-inline: 5px;
+}
+
+.vps-mode-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.vps-mode-chip--waiting_human {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.vps-mode-chip--human {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.vps-mode-chip--ai {
+  background: #E0E7FF;
+  color: #3730A3;
+}
+
+.vps-mode-chip--resolved {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+.vps-chat-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #FFFFFF;
+}
+
+.vps-main-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.vps-main-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vps-main-title-row h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--color-primary-text);
+}
+
+.vps-main-meta {
+  font-size: 12px;
+  color: #6B7280;
+  margin-top: 2px;
+}
+
+.vps-main-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vps-btn-outline,
+.vps-btn-success,
+.vps-btn-danger-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vps-btn-outline {
+  border: 1px solid #D1D5DB;
+  background: #FFFFFF;
+  color: #374151;
+}
+
+.vps-btn-success {
+  border: none;
+  background: #059669;
+  color: #FFFFFF;
+}
+
+.vps-btn-danger-sm {
+  border: none;
+  background: #DC2626;
+  color: #FFFFFF;
+}
+
+.vps-supervise-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #EFF6FF;
+  border-bottom: 1px solid #BFDBFE;
+  color: #1E40AF;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.vps-audit-drawer {
+  padding: 10px 16px;
+  background: #F9FAFB;
+  border-bottom: 1px solid #E5E7EB;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.vps-audit-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+
+.vps-audit-row {
+  display: flex;
+  gap: 12px;
+  font-size: 11.5px;
+  padding: 3px 0;
+  border-bottom: 1px dashed #E5E7EB;
+}
+
+.vps-main-stream {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #F9FAFB;
+}
+
+@supports (scrollbar-color: auto) {
+  .vps-thread-list,
+  .vps-main-stream {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(41, 45, 50, 0.28) transparent;
+  }
+}
+
+.vps-thread-list::-webkit-scrollbar,
+.vps-main-stream::-webkit-scrollbar {
+  width: 6px;
+}
+
+.vps-thread-list::-webkit-scrollbar-thumb,
+.vps-main-stream::-webkit-scrollbar-thumb {
+  background: rgba(41, 45, 50, 0.28);
+  border-radius: 999px;
+}
+
+.vps-adm-system {
+  text-align: center;
+}
+
+.vps-adm-system span {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #E5E7EB;
+  color: #4B5563;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.vps-adm-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 78%;
+}
+
+.vps-adm-msg.out {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.vps-adm-msg.in,
+.vps-adm-msg.bot {
+  align-self: flex-start;
+}
+
+.vps-adm-msg-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.vps-adm-msg-bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.48;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  color: var(--color-primary-text);
+  overflow-wrap: anywhere;
+}
+
+.vps-adm-msg.out .vps-adm-msg-bubble {
+  background: #1F2937;
+  color: #FFFFFF;
+  border-color: #1F2937;
+}
+
+.vps-adm-msg.bot .vps-adm-msg-bubble {
+  background: #EEF2FF;
+  border-color: #C7D2FE;
+}
+
+.vps-adm-msg.staff-note .vps-adm-msg-bubble {
+  background: #FEF3C7;
+  border: 1px dashed #D97706;
+  color: #78350F;
+}
+
+.vps-adm-msg-card {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #CBD5E1;
+  color: #1E293B;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.vps-adm-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+}
+
+.vps-adm-receipt--delivered {
+  color: #059669;
+}
+
+.vps-adm-receipt--read {
+  color: #2563EB;
+}
+
+.vps-adm-receipt--failed {
+  color: #DC2626;
+}
+
+.vps-adm-typing {
+  font-size: 12px;
+  color: #6B7280;
+  font-style: italic;
+}
+
+.vps-adm-composer-wrap {
+  padding: 10px 14px;
+  border-top: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vps-composer-modes {
+  display: flex;
+  gap: 8px;
+}
+
+.vps-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #D1D5DB;
+  background: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vps-mode-switch.active {
+  background: #1F2937;
+  color: #FFFFFF;
+  border-color: #1F2937;
+}
+
+.vps-mode-switch.active.note {
+  background: #F59E0B;
+  color: #1F2937;
+  border-color: #D97706;
+}
+
+.vps-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.vps-adm-textarea {
+  flex: 1;
+  resize: none;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #D1D5DB;
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.vps-adm-textarea:focus-visible,
+.vps-admin-chat-page button:focus-visible {
+  outline: 2.5px solid var(--color-primary-yellow);
+  outline-offset: 2px;
+}
+
+.vps-rename-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.vps-rename-form input {
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid #D1D5DB;
+  font-size: 13px;
+}
+
+.vps-empty-pane {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: #6B7280;
+  font-size: 13.5px;
+}
+
+.vps-empty-note-sm {
+  padding: 8px;
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.vps-empty-note-lg {
+  padding: 2rem;
+  text-align: center;
+  color: #6B7280;
+}
+
+/* Admin Chat Reports */
+.vps-report-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.vps-kpi-card {
+  padding: 16px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vps-kpi-card--danger {
+  border-left: 4px solid #DC2626;
+}
+
+.vps-kpi-card--warn {
+  border-left: 4px solid #D97706;
+}
+
+.vps-kpi-label {
+  font-size: 12.5px;
+  color: #6B7280;
+  font-weight: 600;
+}
+
+.vps-kpi-val {
+  font-size: 26px;
+  color: var(--color-primary-text);
+}
+
+.vps-report-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vps-report-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid #E5E7EB;
+  background: #FFFFFF;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vps-report-tab.active {
+  background: var(--color-primary-yellow);
+  color: #1F2937;
+  border-color: var(--color-primary-yellow);
+}
+
+.vps-report-card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.vps-report-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.vps-report-toolbar h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.vps-table-scroll {
+  overflow-x: auto;
+}
+
+.vps-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.vps-report-table th,
+.vps-report-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #E5E7EB;
+  text-align: left;
+  vertical-align: top;
+}
+
+.vps-report-table th {
+  font-weight: 700;
+  color: #374151;
+  background: #F9FAFB;
+}
+
+.unread-row {
+  background: #FFF1F2;
+}
+
+.vps-status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.vps-status-pill.ok {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.vps-status-pill.warn {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.vps-status-pill.danger {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+.vps-stars-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vps-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 620px;
+}
+
+.vps-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vps-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vps-form-field input,
+.vps-form-field textarea {
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.vps-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1200;
+  padding: 16px;
+}
+
+.vps-modal {
+  width: min(460px, 100%);
+  background: #FFFFFF;
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vps-modal h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.vps-modal textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  font-family: inherit;
+}
+
+.vps-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.vps-adm-spin {
+  animation: vpsAdmSpin 0.9s linear infinite;
+}
+
+@keyframes vpsAdmSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .vps-chat-workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .vps-chat-sidebar {
+    max-height: 290px;
+  }
+
+  .vps-main-stream {
+    min-height: 360px;
+  }
+}
