@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Send,
   Search,
@@ -10,12 +10,23 @@ import {
   ShieldCheck,
   MessageSquarePlus,
   Loader2,
+  ArrowDown,
 } from "lucide-react";
 import { useAdmin } from "../context/AdminContext";
 import { adminChatClient } from "./ChatClient";
 import ChatNavigation from "./ChatNavigation";
 import { useAdminChat } from "./ChatContext";
-import { formatShortClock, getAdminReceiptMeta, isImeComposing } from "./chatUtils";
+import {
+  formatFullDateTime,
+  formatShortClock,
+  formatSidebarTime,
+  getAdminReceiptMeta,
+  getDaySeparatorLabel,
+  getInitials,
+  isImeComposing,
+  isSameCalendarDay,
+  shouldGroupChatMessages,
+} from "./chatUtils";
 import {
   fetchInternalDirectory,
   loadThreadHistory,
@@ -23,6 +34,10 @@ import {
   startOrOpenPeerThread,
 } from "./InternalChatStore";
 import "./chat.css";
+
+function getInternalSenderKey(msg) {
+  return String(msg?.senderUserId || "").toLowerCase();
+}
 
 export default function InternalChatPage() {
   const { showToast } = useAdmin() || {};
@@ -44,8 +59,10 @@ export default function InternalChatPage() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [customNameInput, setCustomNameInput] = useState("");
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   const streamEndRef = useRef(null);
+  const isNearBottomRef = useRef(true);
 
   useEffect(() => {
     fetchInternalDirectory()
@@ -75,6 +92,8 @@ export default function InternalChatPage() {
       if (!alive) return;
       setLoadingMsgs(true);
       setRenaming(false);
+      isNearBottomRef.current = true;
+      setShowScrollBottom(false);
 
       if (adminChatClient.socket?.connected) {
         adminChatClient.socket.emit("internal:join", { threadId: activeThreadId });
@@ -108,15 +127,37 @@ export default function InternalChatPage() {
   const selectedMessages = activeThreadId ? internalMessagesById[Number(activeThreadId)] || [] : [];
 
   useEffect(() => {
-    streamEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isNearBottomRef.current) {
+      streamEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [selectedMessages.length]);
+
+  function handleStreamScroll(e) {
+    const el = e.currentTarget;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = distanceFromBottom <= 80;
+    isNearBottomRef.current = near;
+    setShowScrollBottom(!near && selectedMessages.length > 0);
+  }
+
+  function scrollToBottom() {
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
+    streamEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function handleSelectThread(tid) {
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
+    setActiveThreadId(tid);
+  }
 
   async function handleOpenContact(contact) {
     try {
       const thread = await startOrOpenPeerThread(contact.userId);
       if (thread) {
         upsertInternalThread(thread);
-        setActiveThreadId(thread.id);
+        handleSelectThread(thread.id);
       }
     } catch (err) {
       showToast?.(err.message || "Không thể mở cuộc trò chuyện nội bộ.", "error");
@@ -146,6 +187,8 @@ export default function InternalChatPage() {
     const clean = draftText.trim();
     if (!clean) return;
     setDraftText("");
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
 
     const clientMessageId = makeClientMsgId();
     appendInternalMessage(selectedThread.id, {
@@ -208,25 +251,20 @@ export default function InternalChatPage() {
   })();
 
   return (
-    <div className="vps-admin-chat-page">
+    <div className="vps-admin-chat-page vps-admin-chat-page--split">
       <div className="vps-admin-chat-topbar">
-        <div>
-          <h1 className="page-title" style={{ marginBottom: "4px" }}>
-            Chat nội bộ VietPeace Stay
-          </h1>
-          <p className="page-subtitle">
-            Trao đổi trực tiếp Admin ↔ Quản lý và giữa các Quản lý cơ sở với trạng thái Đã gửi / Đã nhận / Đã xem theo thời gian thực.
-          </p>
+        <div className="vps-admin-chat-heading">
+          <h1 className="page-title">Chat nội bộ VietPeace Stay</h1>
         </div>
         <ChatNavigation />
       </div>
 
       <div className="vps-chat-workspace">
         {/* Left: Active Threads + Contacts */}
-        <aside className="vps-chat-sidebar">
+        <aside className="vps-chat-sidebar" aria-label="Danh bạ và luồng chat nội bộ">
           <div className="vps-sidebar-filters">
             <div className="vps-search-box">
-              <Search size={15} />
+              <Search size={15} aria-hidden="true" />
               <input
                 type="search"
                 placeholder="Tìm Admin, Quản lý hoặc cơ sở…"
@@ -244,27 +282,50 @@ export default function InternalChatPage() {
             ) : (
               internalThreads.map((t) => {
                 const isSelected = Number(t.id) === Number(activeThreadId);
+                const hasUnread = Number(t.unreadCount || 0) > 0 && !isSelected;
+                const avatarTone = t.isArchived
+                  ? "resolved"
+                  : t.peerRole === "ADMIN"
+                    ? "admin"
+                    : "human";
+                const timeLabel = formatSidebarTime(t.lastMessageAt || t.updatedAt);
+                const orgLabel =
+                  t.threadType === "ADMIN_MANAGER" && t.peerRole === "ADMIN"
+                    ? "Ban quản trị VietPeace Stay"
+                    : t.accommodationName || "Quản lý cơ sở";
                 return (
                   <button
                     key={t.id}
                     type="button"
-                    className={`vps-thread-item ${isSelected ? "active" : ""}`}
-                    onClick={() => setActiveThreadId(t.id)}
+                    className={`vps-thread-item ${isSelected ? "active" : ""} ${hasUnread ? "is-unread" : ""}`}
+                    onClick={() => handleSelectThread(t.id)}
                   >
-                    <div className="vps-thread-item-head">
-                      <strong>{t.peerName}</strong>
-                      {t.unreadCount > 0 && <span className="vps-unread-dot">{t.unreadCount}</span>}
+                    <div className={`vps-thread-avatar vps-thread-avatar--${avatarTone}`} aria-hidden="true">
+                      {getInitials(t.peerName, "NV")}
                     </div>
-                    <div className="vps-thread-item-sub">
-                      {t.peerRole === "ADMIN" ? <ShieldCheck size={12} /> : <Building2 size={12} />}
-                      <span>
-                        {t.threadType === "ADMIN_MANAGER" && t.peerRole === "ADMIN"
-                          ? "Ban quản trị VietPeace Stay"
-                          : t.accommodationName || "Quản lý cơ sở"}
-                      </span>
-                      {t.isArchived && <Archive size={11} title="Đã lưu trữ Read-Only" />}
+                    <div className="vps-thread-content">
+                      <div className="vps-thread-item-head">
+                        <strong className="vps-ellipsis">{t.peerName}</strong>
+                        {timeLabel && <span className="vps-thread-time">{timeLabel}</span>}
+                      </div>
+                      <div className="vps-thread-item-sub">
+                        <span className="vps-thread-sub-left" title={orgLabel}>
+                          {t.peerRole === "ADMIN" ? (
+                            <ShieldCheck size={12} aria-hidden="true" />
+                          ) : (
+                            <Building2 size={12} aria-hidden="true" />
+                          )}
+                          <span className="vps-ellipsis">{orgLabel}</span>
+                          {t.isArchived && <Archive size={11} title="Đã lưu trữ Read-Only" />}
+                        </span>
+                        {hasUnread && (
+                          <span className="vps-unread-dot" aria-label={`${t.unreadCount} tin chưa đọc`}>
+                            {t.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <div className="vps-thread-item-preview">{t.lastMessagePreview || "Bắt đầu trao đổi…"}</div>
                     </div>
-                    <div className="vps-thread-item-preview">{t.lastMessagePreview || "Bắt đầu trao đổi…"}</div>
                   </button>
                 );
               })
@@ -280,11 +341,17 @@ export default function InternalChatPage() {
                 className="vps-contact-item"
                 onClick={() => handleOpenContact(c)}
               >
-                <div>
-                  <strong>{c.fullName}</strong>
-                  <small>{c.accommodationName}</small>
+                <div
+                  className={`vps-thread-avatar vps-thread-avatar--${c.role === "ADMIN" ? "admin" : "ai"}`}
+                  aria-hidden="true"
+                >
+                  {getInitials(c.fullName, "NV")}
                 </div>
-                <MessageSquarePlus size={15} />
+                <div className="vps-contact-meta">
+                  <strong className="vps-ellipsis">{c.fullName}</strong>
+                  <small className="vps-ellipsis">{c.accommodationName}</small>
+                </div>
+                <MessageSquarePlus size={15} aria-hidden="true" />
               </button>
             ))}
           </div>
@@ -297,19 +364,33 @@ export default function InternalChatPage() {
           ) : (
             <>
               <header className="vps-main-header">
-                <div>
-                  <div className="vps-main-title-row">
-                    <h2>{selectedThread.peerName}</h2>
-                    <span className="vps-mode-chip vps-mode-chip--ai">
-                      {selectedThread.threadType === "ADMIN_MANAGER" ? "Admin ↔ Quản lý" : "Quản lý ↔ Quản lý"}
-                    </span>
-                    {selectedThread.isArchived && (
-                      <span className="vps-mode-chip vps-mode-chip--resolved">Lưu trữ Read-Only</span>
-                    )}
+                <div className="vps-main-identity">
+                  <div
+                    className={`vps-thread-avatar vps-main-avatar vps-thread-avatar--${
+                      selectedThread.isArchived
+                        ? "resolved"
+                        : selectedThread.peerRole === "ADMIN"
+                          ? "admin"
+                          : "human"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {getInitials(selectedThread.peerName, "NV")}
                   </div>
-                  <div className="vps-main-meta">
-                    <span>{selectedThread.accommodationName || "Ban quản trị"}</span>
-                    {selectedThread.peerEmail && <span> · {selectedThread.peerEmail}</span>}
+                  <div className="vps-main-identity-text">
+                    <div className="vps-main-title-row">
+                      <h2 className="vps-ellipsis">{selectedThread.peerName}</h2>
+                      <span className="vps-mode-chip vps-mode-chip--ai">
+                        {selectedThread.threadType === "ADMIN_MANAGER" ? "Admin ↔ Quản lý" : "Quản lý ↔ Quản lý"}
+                      </span>
+                      {selectedThread.isArchived && (
+                        <span className="vps-mode-chip vps-mode-chip--resolved">Lưu trữ Read-Only</span>
+                      )}
+                    </div>
+                    <div className="vps-main-meta">
+                      <span>{selectedThread.accommodationName || "Ban quản trị"}</span>
+                      {selectedThread.peerEmail && <span> · {selectedThread.peerEmail}</span>}
+                    </div>
                   </div>
                 </div>
 
@@ -322,7 +403,7 @@ export default function InternalChatPage() {
                       setRenaming(true);
                     }}
                   >
-                    <Edit3 size={14} />
+                    <Edit3 size={14} aria-hidden="true" />
                     <span>Đổi tên gợi nhớ</span>
                   </button>
                 ) : (
@@ -333,8 +414,9 @@ export default function InternalChatPage() {
                       onChange={(e) => setCustomNameInput(e.target.value)}
                       placeholder="Nhập tên gợi nhớ…"
                       maxLength={80}
+                      aria-label="Tên gợi nhớ"
                     />
-                    <button type="submit" className="btn-primary btn-sm">
+                    <button type="submit" className="btn btn-primary btn-sm">
                       Lưu
                     </button>
                     <button type="button" className="vps-btn-outline" onClick={() => setRenaming(false)}>
@@ -346,7 +428,7 @@ export default function InternalChatPage() {
 
               {selectedThread.isArchived && (
                 <div className="vps-supervise-bar">
-                  <Archive size={14} />
+                  <Archive size={14} aria-hidden="true" />
                   <span>
                     Luồng lịch sử thuộc nhiệm kỳ bàn giao trước ({selectedThread.archivedReason || "archived"}) —
                     chỉ xem để bảo toàn tính toàn vẹn dữ liệu.
@@ -354,70 +436,99 @@ export default function InternalChatPage() {
                 </div>
               )}
 
-              <div className="vps-main-stream">
-                {loadingMsgs && selectedMessages.length === 0 ? (
-                  <div className="vps-empty-pane">
-                    <Loader2 size={20} className="vps-adm-spin" /> Đang tải tin nhắn nội bộ…
-                  </div>
-                ) : (
-                  selectedMessages.map((msg, idx) => {
-                    const isMine = String(msg.senderUserId || "").toLowerCase() === myUserIdLower;
-                    const showReceipt = isMine && idx === lastOutgoingIdx;
-                    const receipt = showReceipt
-                      ? getAdminReceiptMeta(msg, selectedThread.peerDelivery, selectedThread.peerName)
-                      : null;
+              <div className="vps-stream-shell">
+                <div className="vps-main-stream" onScroll={handleStreamScroll}>
+                  {loadingMsgs && selectedMessages.length === 0 ? (
+                    <div className="vps-empty-pane">
+                      <Loader2 size={20} className="vps-adm-spin" /> Đang tải tin nhắn nội bộ…
+                    </div>
+                  ) : (
+                    selectedMessages.map((msg, idx) => {
+                      const prevMsg = idx > 0 ? selectedMessages[idx - 1] : null;
+                      const showDaySep = !prevMsg || !isSameCalendarDay(prevMsg.createdAt, msg.createdAt);
+                      const isMine = getInternalSenderKey(msg) === myUserIdLower;
+                      const isGrouped = !showDaySep && shouldGroupChatMessages(prevMsg, msg, getInternalSenderKey);
+                      const showReceipt = isMine && idx === lastOutgoingIdx;
+                      const receipt = showReceipt
+                        ? getAdminReceiptMeta(msg, selectedThread.peerDelivery, selectedThread.peerName)
+                        : null;
 
-                    return (
-                      <div key={msg.id || msg.clientMessageId || idx} className={`vps-adm-msg ${isMine ? "out" : "in"}`}>
-                        <div className="vps-adm-msg-meta">
-                          <strong>{isMine ? "Bạn" : msg.senderName || selectedThread.peerName}</strong>
-                          <span>{formatShortClock(msg.createdAt)}</span>
-                        </div>
-                        <div className="vps-adm-msg-bubble">{msg.content}</div>
-                        {receipt && (
-                          <div
-                            className={`vps-adm-receipt vps-adm-receipt--${receipt.state.toLowerCase()}`}
-                            title={receipt.tooltip}
-                          >
-                            {receipt.state === "READ" || receipt.state === "DELIVERED" ? (
-                              <CheckCheck size={12} />
-                            ) : (
-                              <Check size={12} />
+                      return (
+                        <Fragment key={msg.id || msg.clientMessageId || idx}>
+                          {showDaySep && (
+                            <div className="vps-adm-day-sep" role="separator">
+                              <span>{getDaySeparatorLabel(msg.createdAt)}</span>
+                            </div>
+                          )}
+                          <div className={`vps-adm-msg ${isMine ? "out" : "in"} ${isGrouped ? "is-grouped" : ""}`}>
+                            {!isGrouped && (
+                              <div className="vps-adm-msg-meta">
+                                <strong>{isMine ? "Bạn" : msg.senderName || selectedThread.peerName}</strong>
+                                <span>{formatShortClock(msg.createdAt)}</span>
+                              </div>
                             )}
-                            <span>{receipt.label}</span>
+                            <div className="vps-adm-msg-bubble" title={formatFullDateTime(msg.createdAt)}>
+                              {msg.content}
+                            </div>
+                            {receipt && (
+                              <div
+                                className={`vps-adm-receipt vps-adm-receipt--${receipt.state.toLowerCase()}`}
+                                title={receipt.tooltip}
+                              >
+                                {receipt.state === "READ" || receipt.state === "DELIVERED" ? (
+                                  <CheckCheck size={12} aria-hidden="true" />
+                                ) : (
+                                  <Check size={12} aria-hidden="true" />
+                                )}
+                                <span>{receipt.label}</span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })
+                        </Fragment>
+                      );
+                    })
+                  )}
+                  <div ref={streamEndRef} />
+                </div>
+
+                {showScrollBottom && (
+                  <button
+                    type="button"
+                    className="vps-scroll-bottom-btn"
+                    onClick={scrollToBottom}
+                  >
+                    <ArrowDown size={14} aria-hidden="true" />
+                    <span>Tin mới nhất</span>
+                  </button>
                 )}
-                <div ref={streamEndRef} />
               </div>
 
               <form className="vps-adm-composer-wrap" onSubmit={handleSendSubmit}>
-                <div className="vps-composer-row">
-                  <textarea
-                    rows={2}
-                    className="vps-adm-textarea"
-                    disabled={selectedThread.isArchived}
-                    value={draftText}
-                    onChange={(e) => setDraftText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={
-                      selectedThread.isArchived
-                        ? "Luồng đã lưu trữ Read-Only sau bàn giao nhiệm kỳ."
-                        : `Nhắn tin nội bộ tới ${selectedThread.peerName}… (Enter để gửi)`
-                    }
-                    aria-label="Nội dung tin nhắn nội bộ"
-                  />
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={selectedThread.isArchived || !draftText.trim()}
-                  >
-                    <Send size={16} />
-                    <span>Gửi</span>
-                  </button>
+                <div className="vps-composer-card">
+                  <div className="vps-composer-row">
+                    <textarea
+                      rows={1}
+                      className="vps-adm-textarea"
+                      disabled={selectedThread.isArchived}
+                      value={draftText}
+                      onChange={(e) => setDraftText(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={
+                        selectedThread.isArchived
+                          ? "Luồng đã lưu trữ Read-Only sau bàn giao nhiệm kỳ."
+                          : `Nhắn tin nội bộ tới ${selectedThread.peerName}… (Enter gửi, Shift+Enter xuống dòng)`
+                      }
+                      aria-label="Nội dung tin nhắn nội bộ"
+                    />
+                    <button
+                      type="submit"
+                      className="btn btn-primary vps-send-btn"
+                      disabled={selectedThread.isArchived || !draftText.trim()}
+                    >
+                      <Send size={15} aria-hidden="true" />
+                      <span>Gửi</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             </>

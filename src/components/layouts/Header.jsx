@@ -1,10 +1,11 @@
 import ValidatedForm, { FieldError } from '../forms/ValidatedForm';
 import { useState, useRef, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import AuthContext from '../../context/AuthContext';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { useAdminChat } from '../../chat/ChatContext.jsx';
+import { formatCountdown } from '../../chat/chatUtils.js';
 
 import Breadcrumb from '../common/Breadcrumb.jsx';
 import {
@@ -20,6 +21,7 @@ import {
   Eye,
   EyeOff,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 
 export default function Header({ breadcrumbItems = [] }) {
@@ -32,12 +34,22 @@ export default function Header({ breadcrumbItems = [] }) {
   } = useAdmin();
 
   const { currentLoggedInUser, logout } = useContext(AuthContext);
-  const { isAdmin: isChatAdmin, waitingCount, internalUnread, reportsBadge, pendingHandoffAlerts } = useAdminChat();
+  const {
+    isAdmin: isChatAdmin,
+    isManager,
+    waitingCount,
+    waitingConversations,
+    internalUnread,
+    reportsBadge,
+    reportsSummary,
+    pendingHandoffAlerts,
+  } = useAdminChat();
   const isAdmin = currentLoggedInUser?.role === 'ADMIN' || isChatAdmin;
   const totalNotifs = waitingCount + internalUnread + (isAdmin ? reportsBadge : 0);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Modal Hồ sơ cá nhân & Đổi mật khẩu chủ động
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -52,6 +64,14 @@ export default function Header({ breadcrumbItems = [] }) {
   const dropdownRef = useRef(null);
   const notifRef = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const onCustomerChatPage = location.pathname === '/admin/chat';
+
+  useEffect(() => {
+    if (!notificationsOpen || waitingCount === 0) return undefined;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [notificationsOpen, waitingCount]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -263,23 +283,46 @@ export default function Header({ breadcrumbItems = [] }) {
             )}
           </div>
 
+          {/* Quick alert pill for Managers when off /admin/chat */}
+          {isManager && waitingCount > 0 && !onCustomerChatPage && (
+            <button
+              type="button"
+              className="header-chat-alert-pill"
+              onClick={() => {
+                const targetCid = waitingConversations[0]?.id || pendingHandoffAlerts[0]?.conversationId;
+                navigate(targetCid ? `/admin/chat?convId=${targetCid}` : '/admin/chat');
+              }}
+              title="Khách hàng đang yêu cầu gặp Quản lý"
+            >
+              <AlertTriangle size={14} />
+              <span>{waitingCount} khách chờ gặp Quản lý</span>
+            </button>
+          )}
+
           {/* Notifications (Đặt bên phải tên admin) */}
           <div style={{ position: 'relative' }} ref={notifRef}>
             <button
               type="button"
-              className="header-notification-btn"
-              onClick={() => setNotificationsOpen(!notificationsOpen)}
+              className={`header-notification-btn ${waitingCount > 0 ? 'has-urgent' : ''}`}
+              onClick={() => {
+                setNowMs(Date.now());
+                setNotificationsOpen(!notificationsOpen);
+              }}
               aria-label="Thông báo hệ thống"
               title="Thông báo hệ thống"
             >
               <Bell size={16} />
-              {totalNotifs > 0 && <span className="notification-badge" />}
+              {totalNotifs > 0 && (
+                <span className={`notification-badge ${waitingCount > 0 ? 'notification-badge--urgent' : ''}`}>
+                  {totalNotifs > 9 ? '9+' : totalNotifs}
+                </span>
+              )}
             </button>
 
             {notificationsOpen && (
               <div
                 className="header-user-dropdown"
-                style={{ width: '310px', right: 0 }}
+                style={{ width: '330px', right: 0 }}
               >
                 <div
                   style={{
@@ -295,39 +338,72 @@ export default function Header({ breadcrumbItems = [] }) {
                   <span>Thông báo hệ thống</span>
                   <span className="badge badge-warning">{totalNotifs} Mới</span>
                 </div>
-                <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                   {totalNotifs === 0 ? (
                     <div style={{ padding: '14px', fontSize: '12px', color: '#6B7280', textAlign: 'center' }}>
                       Không có thông báo chat hoặc cảnh báo mới.
                     </div>
                   ) : (
                     <>
-                      {waitingCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNotificationsOpen(false);
-                            navigate('/admin/chat');
-                          }}
-                          style={{
-                            width: '100%',
-                            textAlign: 'left',
-                            padding: '10px 14px',
-                            border: 'none',
-                            borderBottom: '1px solid #F3F4F6',
-                            background: '#FFFBEB',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <div style={{ fontWeight: 700, color: '#92400E' }}>
-                            {waitingCount} khách hàng đang chờ Quản lý tiếp nhận
-                          </div>
-                          <div style={{ color: '#6B7280', marginTop: '2px' }}>
-                            {pendingHandoffAlerts[0]?.accommodationName || 'Vui lòng tiếp nhận trong 5 phút.'}
-                          </div>
-                        </button>
-                      )}
+                      {(waitingConversations.length > 0 ? waitingConversations : pendingHandoffAlerts)
+                        .slice(0, 5)
+                        .map((item) => {
+                          const cid = Number(item.id || item.conversationId);
+                          const expiresAt = item.managerWaitExpiresAt || item.expiresAt || null;
+                          const customerLabel = item.customerName || item.requesterName || 'Khách hàng';
+                          return (
+                            <button
+                              key={cid}
+                              type="button"
+                              onClick={() => {
+                                setNotificationsOpen(false);
+                                navigate(cid ? `/admin/chat?convId=${cid}` : '/admin/chat');
+                              }}
+                              style={{
+                                width: '100%',
+                                textAlign: 'left',
+                                padding: '10px 14px',
+                                border: 'none',
+                                borderBottom: '1px solid #F3F4F6',
+                                background: '#FFFBEB',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                }}
+                              >
+                                <span style={{ fontWeight: 700, color: '#92400E' }}>
+                                  {customerLabel} · Yêu cầu gặp Quản lý
+                                </span>
+                                {expiresAt && (
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      color: '#78350F',
+                                      background: '#FDE68A',
+                                      padding: '1px 6px',
+                                      borderRadius: '999px',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {formatCountdown(expiresAt, nowMs)}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ color: '#4B5563', marginTop: '3px', fontSize: '11.5px' }}>
+                                <b>{item.accommodationName || 'Cơ sở'}</b>
+                                {item.lastMessagePreview ? ` — ${item.lastMessagePreview}` : ''}
+                              </div>
+                            </button>
+                          );
+                        })}
                       {internalUnread > 0 && (
                         <button
                           type="button"
@@ -354,12 +430,38 @@ export default function Header({ breadcrumbItems = [] }) {
                           </div>
                         </button>
                       )}
-                      {isAdmin && reportsBadge > 0 && (
+                      {isAdmin && reportsSummary?.pendingLowRatingsCount > 0 && (
                         <button
                           type="button"
                           onClick={() => {
                             setNotificationsOpen(false);
-                            navigate('/admin/chat/reports');
+                            navigate('/admin/chat/reports?tab=RATINGS');
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '10px 14px',
+                            border: 'none',
+                            borderBottom: '1px solid #F3F4F6',
+                            background: '#FFF7ED',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: '#9A3412' }}>
+                            {reportsSummary.pendingLowRatingsCount} đánh giá 1–3★ chờ kiểm duyệt
+                          </div>
+                          <div style={{ color: '#6B7280', marginTop: '2px' }}>
+                            Xem báo cáo chất lượng Quản lý & gửi nhắc nhở.
+                          </div>
+                        </button>
+                      )}
+                      {isAdmin && reportsSummary?.unreadMissedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNotificationsOpen(false);
+                            navigate('/admin/chat/reports?tab=MISSED');
                           }}
                           style={{
                             width: '100%',
@@ -372,13 +474,41 @@ export default function Header({ breadcrumbItems = [] }) {
                           }}
                         >
                           <div style={{ fontWeight: 700, color: '#9F1239' }}>
-                            {reportsBadge} cảnh báo CSKH / Quản lý bỏ lỡ 5 phút
+                            {reportsSummary.unreadMissedCount} yêu cầu Quản lý bỏ lỡ 5 phút
                           </div>
                           <div style={{ color: '#6B7280', marginTop: '2px' }}>
                             Xem ngay tại mục Báo cáo chat.
                           </div>
                         </button>
                       )}
+                      {isAdmin &&
+                        reportsBadge > 0 &&
+                        !reportsSummary?.pendingLowRatingsCount &&
+                        !reportsSummary?.unreadMissedCount && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              navigate('/admin/chat/reports');
+                            }}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '10px 14px',
+                              border: 'none',
+                              background: '#FFF1F2',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <div style={{ fontWeight: 700, color: '#9F1239' }}>
+                              {reportsBadge} cảnh báo CSKH / Quản lý bỏ lỡ 5 phút
+                            </div>
+                            <div style={{ color: '#6B7280', marginTop: '2px' }}>
+                              Xem ngay tại mục Báo cáo chat.
+                            </div>
+                          </button>
+                        )}
                     </>
                   )}
                 </div>

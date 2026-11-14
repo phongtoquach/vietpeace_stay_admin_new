@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Search,
   UserCheck,
@@ -15,6 +16,8 @@ import {
   AlertTriangle,
   Loader2,
   X,
+  ArrowDown,
+  Lock,
 } from "lucide-react";
 import { useAdmin } from "../context/AdminContext";
 import { adminChatClient } from "./ChatClient";
@@ -24,11 +27,23 @@ import {
   formatCountdown,
   formatFullDateTime,
   formatShortClock,
+  formatSidebarTime,
   getAdminReceiptMeta,
+  getDaySeparatorLabel,
+  getHandlingModeMeta,
+  getInitials,
   isImeComposing,
+  isSameCalendarDay,
+  shouldGroupChatMessages,
 } from "./chatUtils";
 import { makeClientMsgId } from "./InternalChatStore";
 import "./chat.css";
+
+function getConvMessageSenderKey(msg) {
+  if (!msg) return "";
+  if (msg.visibility === "STAFF") return `STAFF:${msg.senderUserId || msg.senderName || ""}`;
+  return `${msg.senderType || ""}:${msg.senderUserId || ""}`;
+}
 
 function renderStaffCardSummary(msg) {
   const p = msg?.payload;
@@ -75,6 +90,7 @@ function renderStaffCardSummary(msg) {
 }
 
 export default function ChatOperations() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { showToast } = useAdmin() || {};
   const {
     isAdmin,
@@ -90,6 +106,7 @@ export default function ChatOperations() {
     customerTypingByConv,
     pendingHandoffAlerts,
     dismissHandoffAlert,
+    waitingCount,
   } = useAdminChat();
 
   const [modeFilter, setModeFilter] = useState("ALL");
@@ -99,12 +116,16 @@ export default function ChatOperations() {
   const [composerMode, setComposerMode] = useState("PUBLIC"); // 'PUBLIC' | 'STAFF_NOTE'
   const [draftText, setDraftText] = useState("");
   const [busyAction, setBusyAction] = useState(false);
+  const [draftingAi, setDraftingAi] = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditEvents, setAuditEvents] = useState([]);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
+  const streamRef = useRef(null);
   const streamEndRef = useRef(null);
+  const isNearBottomRef = useRef(true);
 
   // Admin supervise filter accommodations + initial mode
   useEffect(() => {
@@ -127,14 +148,33 @@ export default function ChatOperations() {
     };
   }, [isAdmin]);
 
-  // Refetch filtered list on filter change
+  // Keep full unfiltered global list synchronized so waiting counters/banners stay accurate across tabs
   useEffect(() => {
-    refreshConversations({
-      accommodationId: accomFilter || null,
-      handlingMode: modeFilter === "RESOLVED" ? "ALL" : modeFilter,
-      status: modeFilter === "RESOLVED" ? "RESOLVED" : "ALL",
-    }).catch(() => {});
-  }, [accomFilter, modeFilter, refreshConversations]);
+    refreshConversations().catch(() => {});
+  }, [refreshConversations]);
+
+  // Support deep link /admin/chat?convId=... from header notifications
+  const requestedConvId = Number(searchParams.get("convId") || 0);
+  useEffect(() => {
+    if (!requestedConvId) return undefined;
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setModeFilter("ALL");
+      setActiveConvId(requestedConvId);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("convId");
+          return next;
+        },
+        { replace: true },
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedConvId, setActiveConvId, setSearchParams]);
 
   // 1-second timer when any waiting handoff exists
   useEffect(() => {
@@ -145,7 +185,7 @@ export default function ChatOperations() {
 
   const filteredConversations = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    return conversations.filter((c) => {
+    const list = conversations.filter((c) => {
       if (accomFilter && Number(c.accommodationId) !== Number(accomFilter)) return false;
       if (modeFilter === "RESOLVED" && c.status !== "RESOLVED") return false;
       if (modeFilter !== "ALL" && modeFilter !== "RESOLVED" && c.handlingMode !== modeFilter) return false;
@@ -157,6 +197,11 @@ export default function ChatOperations() {
         String(c.lastMessagePreview || "").toLowerCase().includes(q)
       );
     });
+    return [...list].sort((a, b) => {
+      const aWaiting = a.handlingMode === "WAITING_HUMAN" && a.status === "OPEN" ? 0 : 1;
+      const bWaiting = b.handlingMode === "WAITING_HUMAN" && b.status === "OPEN" ? 0 : 1;
+      return aWaiting - bWaiting;
+    });
   }, [conversations, accomFilter, modeFilter, searchTerm]);
 
   const selectedConv = useMemo(
@@ -166,12 +211,14 @@ export default function ChatOperations() {
 
   const selectedMessages = activeConvId ? convMessagesById[Number(activeConvId)] || [] : [];
 
-  // Select first conversation by default if none active
+  // Prefer active waiting handoff first if nothing is selected yet
   useEffect(() => {
+    if (requestedConvId) return;
     if (!activeConvId && filteredConversations.length > 0) {
-      setActiveConvId(filteredConversations[0].id);
+      const firstWaiting = filteredConversations.find((c) => c.handlingMode === "WAITING_HUMAN" && c.status === "OPEN");
+      setActiveConvId((firstWaiting || filteredConversations[0]).id);
     }
-  }, [activeConvId, filteredConversations, setActiveConvId]);
+  }, [requestedConvId, activeConvId, filteredConversations, setActiveConvId]);
 
   // Load selected conversation messages & join room & mark read (Manager ONLY!)
   useEffect(() => {
@@ -182,6 +229,8 @@ export default function ChatOperations() {
       if (!alive) return;
       setLoadingMsgs(true);
       setAuditOpen(false);
+      isNearBottomRef.current = true;
+      setShowScrollBottom(false);
 
       if (adminChatClient.socket?.connected) {
         adminChatClient.socket.emit("conversation:join", { conversationId: activeConvId });
@@ -199,6 +248,7 @@ export default function ChatOperations() {
           if (maxPublicSeq > 0) {
             adminChatClient.markDelivered(activeConvId, maxPublicSeq).catch(() => {});
             adminChatClient.markRead(activeConvId, maxPublicSeq).catch(() => {});
+            upsertConversation({ id: Number(activeConvId), unreadCount: 0 });
           }
         }
       } catch (err) {
@@ -212,11 +262,33 @@ export default function ChatOperations() {
     return () => {
       alive = false;
     };
-  }, [activeConvId, isManager, setConvMessagesById, showToast]);
+  }, [activeConvId, isManager, setConvMessagesById, showToast, upsertConversation]);
 
   useEffect(() => {
-    streamEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isNearBottomRef.current) {
+      streamEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [selectedMessages.length]);
+
+  function handleStreamScroll(e) {
+    const el = e.currentTarget;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = distanceFromBottom <= 80;
+    isNearBottomRef.current = near;
+    setShowScrollBottom(!near && selectedMessages.length > 0);
+  }
+
+  function scrollToBottom() {
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
+    streamEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function handleSelectConversation(cid) {
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
+    setActiveConvId(cid);
+  }
 
   async function handleClaim(cid) {
     setBusyAction(true);
@@ -224,7 +296,7 @@ export default function ChatOperations() {
       const updated = await adminChatClient.claimConversation(cid);
       upsertConversation(updated);
       dismissHandoffAlert(cid);
-      setActiveConvId(cid);
+      handleSelectConversation(cid);
       setComposerMode("PUBLIC");
       showToast?.("Đã tiếp nhận khách hàng thành công.", "success");
     } catch (err) {
@@ -236,7 +308,7 @@ export default function ChatOperations() {
 
   async function handleAiDraft() {
     if (!selectedConv) return;
-    setBusyAction(true);
+    setDraftingAi(true);
     try {
       const res = await adminChatClient.generateAiDraft(selectedConv.id);
       if (res?.draftText) {
@@ -247,7 +319,7 @@ export default function ChatOperations() {
     } catch (err) {
       showToast?.(err.message || "Không thể tạo gợi ý AI lúc này.", "error");
     } finally {
-      setBusyAction(false);
+      setDraftingAi(false);
     }
   }
 
@@ -298,6 +370,8 @@ export default function ChatOperations() {
     const clean = draftText.trim();
     if (!clean) return;
     setDraftText("");
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
 
     if (composerMode === "STAFF_NOTE") {
       try {
@@ -360,19 +434,26 @@ export default function ChatOperations() {
 
   const canSendPublicReply =
     isManager && selectedConv && selectedConv.status === "OPEN" && selectedConv.handlingMode === "HUMAN";
+  const selectedModeMeta = selectedConv
+    ? getHandlingModeMeta(selectedConv.handlingMode, selectedConv.status)
+    : null;
+  const hasManagerHeaderButtons =
+    isManager &&
+    selectedConv &&
+    selectedConv.status === "OPEN" &&
+    (selectedConv.handlingMode === "WAITING_HUMAN" || selectedConv.handlingMode === "HUMAN");
 
   return (
-    <div className="vps-admin-chat-page">
+    <div className="vps-admin-chat-page vps-admin-chat-page--split">
       <div className="vps-admin-chat-topbar">
-        <div>
-          <h1 className="page-title" style={{ marginBottom: "4px" }}>
-            Trung tâm Tư vấn Khách hàng
-          </h1>
-          <p className="page-subtitle">
-            {isAdmin
-              ? "Chế độ Super Admin Giám sát (Read-Only): theo dõi chất lượng phản hồi các cơ sở & ghi chú nội bộ."
-              : "Tiếp nhận yêu cầu gặp Quản lý trong 5 phút và hỗ trợ trực tiếp khách lưu trú tại cơ sở của bạn."}
-          </p>
+        <div className="vps-admin-chat-heading">
+          <h1 className="page-title">Trung tâm Tư vấn Khách hàng</h1>
+          {isAdmin && (
+            <span className="vps-role-hint-pill vps-role-hint-pill--admin">
+              <Eye size={12} aria-hidden="true" />
+              Giám sát Read-Only
+            </span>
+          )}
         </div>
         <ChatNavigation />
       </div>
@@ -380,27 +461,53 @@ export default function ChatOperations() {
       {/* Urgent Manager 5-min Handoff Alert Strip */}
       {isManager && pendingHandoffAlerts.length > 0 && (
         <div className="vps-urgent-banner" role="alert">
-          <AlertTriangle size={18} />
+          <AlertTriangle size={18} aria-hidden="true" />
           <div className="vps-urgent-text">
-            <strong>Yêu cầu gặp Quản lý mới:</strong>{" "}
+            <strong>
+              {waitingCount > 1
+                ? `Yêu cầu gặp Quản lý (${waitingCount} khách đang chờ):`
+                : "Yêu cầu gặp Quản lý mới:"}
+            </strong>{" "}
             {pendingHandoffAlerts[0].requesterName || "Khách hàng"} đang chờ tại{" "}
-            <b>{pendingHandoffAlerts[0].accommodationName}</b> (vui lòng tiếp nhận trong 5 phút).
+            <b>{pendingHandoffAlerts[0].accommodationName}</b>
+            {pendingHandoffAlerts[0].expiresAt ? (
+              <>
+                {" · Còn "}
+                <span className="vps-urgent-countdown">
+                  {formatCountdown(pendingHandoffAlerts[0].expiresAt, nowMs)}
+                </span>
+              </>
+            ) : (
+              " (vui lòng tiếp nhận trong 5 phút)"
+            )}
           </div>
-          <button
-            type="button"
-            className="btn-primary btn-sm"
-            disabled={busyAction}
-            onClick={() => handleClaim(pendingHandoffAlerts[0].conversationId)}
-          >
-            Tiếp nhận ngay
-          </button>
+          <div className="vps-urgent-actions">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setModeFilter("ALL");
+                handleSelectConversation(pendingHandoffAlerts[0].conversationId);
+              }}
+            >
+              Xem
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={busyAction}
+              onClick={() => handleClaim(pendingHandoffAlerts[0].conversationId)}
+            >
+              Tiếp nhận ngay
+            </button>
+          </div>
           <button
             type="button"
             className="vps-dismiss-btn"
             aria-label="Ẩn thông báo"
             onClick={() => dismissHandoffAlert(pendingHandoffAlerts[0].conversationId)}
           >
-            <X size={15} />
+            <X size={15} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -408,10 +515,10 @@ export default function ChatOperations() {
       {/* Split Workspace */}
       <div className="vps-chat-workspace">
         {/* Left List Pane */}
-        <aside className="vps-chat-sidebar">
+        <aside className="vps-chat-sidebar" aria-label="Danh sách cuộc trò chuyện">
           <div className="vps-sidebar-filters">
             <div className="vps-search-box">
-              <Search size={15} />
+              <Search size={15} aria-hidden="true" />
               <input
                 type="search"
                 placeholder="Tìm tên khách, email, cơ sở…"
@@ -437,21 +544,25 @@ export default function ChatOperations() {
               </select>
             )}
 
-            <div className="vps-filter-pills">
+            <div className="vps-filter-pills vps-filter-pills--scroll" role="group" aria-label="Lọc trạng thái">
               {[
-                { key: "ALL", label: "Tất cả" },
-                { key: "WAITING_HUMAN", label: "Chờ tiếp nhận" },
-                { key: "HUMAN", label: "Đang xử lý" },
-                { key: "AI", label: "AI hỗ trợ" },
-                { key: "RESOLVED", label: "Đã đóng" },
+                { key: "ALL", label: "Tất cả", title: "Tất cả hội thoại" },
+                { key: "WAITING_HUMAN", label: "Chờ", count: waitingCount, title: "Đang chờ Quản lý tiếp nhận" },
+                { key: "HUMAN", label: "Đang chat", title: "Quản lý đang hỗ trợ trực tiếp" },
+                { key: "AI", label: "AI", title: "Trợ lý AI đang hỗ trợ" },
+                { key: "RESOLVED", label: "Đã đóng", title: "Hội thoại đã hoàn tất" },
               ].map((p) => (
                 <button
                   key={p.key}
                   type="button"
-                  className={`vps-filter-pill ${modeFilter === p.key ? "active" : ""}`}
+                  title={p.title}
+                  className={`vps-filter-pill ${modeFilter === p.key ? "active" : ""} ${
+                    p.key === "WAITING_HUMAN" && waitingCount > 0 ? "has-waiting" : ""
+                  }`}
                   onClick={() => setModeFilter(p.key)}
                 >
-                  {p.label}
+                  <span>{p.label}</span>
+                  {p.count > 0 && <span className="vps-pill-count">{p.count}</span>}
                 </button>
               ))}
             </div>
@@ -463,32 +574,47 @@ export default function ChatOperations() {
             ) : (
               filteredConversations.map((c) => {
                 const isSelected = Number(c.id) === Number(activeConvId);
+                const modeMeta = getHandlingModeMeta(c.handlingMode, c.status);
+                const unreadNum = Number(c.unreadCount || 0);
+                const hasUnread = unreadNum > 0 && !isSelected;
+                const timeLabel = formatSidebarTime(c.lastMessageAt || c.updatedAt || c.createdAt);
                 return (
                   <button
                     key={c.id}
                     type="button"
                     className={`vps-thread-item ${isSelected ? "active" : ""} ${
-                      c.handlingMode === "WAITING_HUMAN" ? "waiting" : ""
-                    }`}
-                    onClick={() => setActiveConvId(c.id)}
+                      c.handlingMode === "WAITING_HUMAN" && c.status === "OPEN" ? "waiting" : ""
+                    } ${hasUnread ? "is-unread" : ""}`}
+                    onClick={() => handleSelectConversation(c.id)}
                   >
-                    <div className="vps-thread-item-head">
-                      <strong>{c.customerName || "Khách hàng"}</strong>
-                      <span className={`vps-mode-chip vps-mode-chip--${c.handlingMode.toLowerCase()}`}>
-                        {c.handlingMode === "WAITING_HUMAN"
-                          ? `Chờ ${formatCountdown(c.managerWaitExpiresAt, nowMs)}`
-                          : c.handlingMode === "HUMAN"
-                            ? "Quản lý"
-                            : c.status === "RESOLVED"
-                              ? "Đã đóng"
-                              : "AI"}
-                      </span>
+                    <div className={`vps-thread-avatar vps-thread-avatar--${modeMeta.tone}`} aria-hidden="true">
+                      {getInitials(c.customerName, "KH")}
                     </div>
-                    <div className="vps-thread-item-sub">
-                      <Building2 size={12} />
-                      <span>{c.accommodationName}</span>
+                    <div className="vps-thread-content">
+                      <div className="vps-thread-item-head">
+                        <strong className="vps-ellipsis">{c.customerName || "Khách hàng"}</strong>
+                        {timeLabel && <span className="vps-thread-time">{timeLabel}</span>}
+                      </div>
+                      <div className="vps-thread-item-sub">
+                        <span className="vps-thread-sub-left" title={c.accommodationName}>
+                          <Building2 size={12} aria-hidden="true" />
+                          <span className="vps-ellipsis">{c.accommodationName}</span>
+                        </span>
+                        <span className="vps-thread-sub-badges">
+                          {hasUnread && (
+                            <span className="vps-unread-dot" aria-label={`${unreadNum} tin chưa đọc`}>
+                              {unreadNum}
+                            </span>
+                          )}
+                          <span className={`vps-mode-chip vps-mode-chip--${modeMeta.tone}`}>
+                            {c.handlingMode === "WAITING_HUMAN" && c.status === "OPEN"
+                              ? `Chờ ${formatCountdown(c.managerWaitExpiresAt, nowMs)}`
+                              : modeMeta.shortLabel}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="vps-thread-item-preview">{c.lastMessagePreview || "…"}</div>
                     </div>
-                    <div className="vps-thread-item-preview">{c.lastMessagePreview || "…"}</div>
                   </button>
                 );
               })
@@ -503,22 +629,36 @@ export default function ChatOperations() {
           ) : (
             <>
               <header className="vps-main-header">
-                <div>
-                  <div className="vps-main-title-row">
-                    <h2>{selectedConv.customerName || "Khách hàng"}</h2>
-                    <span className={`vps-mode-chip vps-mode-chip--${selectedConv.handlingMode.toLowerCase()}`}>
-                      {selectedConv.handlingMode}
-                    </span>
-                    {selectedConv.status === "RESOLVED" && (
-                      <span className="vps-mode-chip vps-mode-chip--resolved">RESOLVED</span>
-                    )}
+                <div className="vps-main-identity">
+                  <div
+                    className={`vps-thread-avatar vps-main-avatar vps-thread-avatar--${selectedModeMeta.tone}`}
+                    aria-hidden="true"
+                  >
+                    {getInitials(selectedConv.customerName, "KH")}
                   </div>
-                  <div className="vps-main-meta">
-                    <span>{selectedConv.accommodationName}</span>
-                    {selectedConv.customerEmail && <span> · {selectedConv.customerEmail}</span>}
-                    {selectedConv.assignedManagerName && (
-                      <span> · Phụ trách: {selectedConv.assignedManagerName}</span>
-                    )}
+                  <div className="vps-main-identity-text">
+                    <div className="vps-main-title-row">
+                      <h2 className="vps-ellipsis">{selectedConv.customerName || "Khách hàng"}</h2>
+                      <span className={`vps-mode-chip vps-mode-chip--${selectedModeMeta.tone}`}>
+                        {selectedModeMeta.fullLabel}
+                      </span>
+                    </div>
+                    <div
+                      className="vps-main-meta"
+                      title={[
+                        selectedConv.accommodationName,
+                        selectedConv.customerEmail,
+                        selectedConv.assignedManagerName ? `Phụ trách: ${selectedConv.assignedManagerName}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    >
+                      <span>{selectedConv.accommodationName}</span>
+                      {selectedConv.customerEmail && <span> · {selectedConv.customerEmail}</span>}
+                      {selectedConv.assignedManagerName && (
+                        <span> · Phụ trách: {selectedConv.assignedManagerName}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -526,11 +666,11 @@ export default function ChatOperations() {
                   {isManager && selectedConv.handlingMode === "WAITING_HUMAN" && selectedConv.status === "OPEN" && (
                     <button
                       type="button"
-                      className="btn-primary btn-sm"
+                      className="btn btn-primary btn-sm"
                       disabled={busyAction}
                       onClick={() => handleClaim(selectedConv.id)}
                     >
-                      <UserCheck size={15} />
+                      <UserCheck size={15} aria-hidden="true" />
                       <span>Tiếp nhận ngay ({formatCountdown(selectedConv.managerWaitExpiresAt, nowMs)})</span>
                     </button>
                   )}
@@ -541,18 +681,9 @@ export default function ChatOperations() {
                         type="button"
                         className="vps-btn-outline"
                         disabled={busyAction}
-                        onClick={handleAiDraft}
-                      >
-                        <Sparkles size={14} />
-                        <span>Gợi ý AI</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="vps-btn-outline"
-                        disabled={busyAction}
                         onClick={handleReturnToAi}
                       >
-                        <RotateCcw size={14} />
+                        <RotateCcw size={14} aria-hidden="true" />
                         <span>Trả lại AI</span>
                       </button>
                       <button
@@ -561,22 +692,30 @@ export default function ChatOperations() {
                         disabled={busyAction}
                         onClick={handleResolve}
                       >
-                        <CheckCircle2 size={14} />
+                        <CheckCircle2 size={14} aria-hidden="true" />
                         <span>Hoàn tất</span>
                       </button>
                     </>
                   )}
 
-                  <button type="button" className="vps-btn-outline" onClick={handleLoadAudit}>
-                    <History size={14} />
-                    <span>Nhật ký</span>
+                  {hasManagerHeaderButtons && <span className="vps-action-divider" aria-hidden="true" />}
+
+                  <button
+                    type="button"
+                    className={`vps-btn-icon ${auditOpen ? "is-open" : ""}`}
+                    aria-label="Nhật ký sự kiện"
+                    aria-expanded={auditOpen}
+                    title="Nhật ký sự kiện hội thoại"
+                    onClick={handleLoadAudit}
+                  >
+                    <History size={15} aria-hidden="true" />
                   </button>
                 </div>
               </header>
 
               {isAdmin && (
                 <div className="vps-supervise-bar">
-                  <Eye size={14} />
+                  <Eye size={14} aria-hidden="true" />
                   <span>
                     Chế độ Giám sát Admin (Read-Only): Không gửi tin trực tiếp ra khách hàng và không làm
                     lệch trạng thái Đã nhận / Đã xem phía Quản lý.
@@ -588,15 +727,16 @@ export default function ChatOperations() {
                 <div className="vps-audit-drawer">
                   <div className="vps-audit-head">
                     <strong>Nhật ký sự kiện hội thoại</strong>
-                    <button type="button" onClick={() => setAuditOpen(false)}>
+                    <button type="button" className="vps-audit-close" onClick={() => setAuditOpen(false)}>
                       Đóng
                     </button>
                   </div>
                   <div className="vps-audit-list">
                     {auditEvents.map((ev) => (
                       <div key={ev.id} className="vps-audit-row">
-                        <b>{ev.eventType}</b>
-                        <span>{ev.actorKey}</span>
+                        <span>
+                          <b>{ev.eventType}</b> · {ev.actorKey}
+                        </span>
                         <small>{formatFullDateTime(ev.createdAt)}</small>
                       </div>
                     ))}
@@ -604,129 +744,192 @@ export default function ChatOperations() {
                 </div>
               )}
 
-              <div className="vps-main-stream">
-                {loadingMsgs && selectedMessages.length === 0 ? (
-                  <div className="vps-empty-pane">
-                    <Loader2 size={20} className="vps-adm-spin" /> Đang tải lịch sử hội thoại…
-                  </div>
-                ) : (
-                  selectedMessages.map((msg, idx) => {
-                    const isStaffNote = msg.visibility === "STAFF";
-                    const isManagerMsg = msg.senderType === "MANAGER";
-                    const isCustomerMsg = msg.senderType === "CUSTOMER" || msg.senderType === "GUEST";
-                    const isSystem = msg.senderType === "SYSTEM";
+              <div className="vps-stream-shell">
+                <div className="vps-main-stream" ref={streamRef} onScroll={handleStreamScroll}>
+                  {loadingMsgs && selectedMessages.length === 0 ? (
+                    <div className="vps-empty-pane">
+                      <Loader2 size={20} className="vps-adm-spin" /> Đang tải lịch sử hội thoại…
+                    </div>
+                  ) : (
+                    selectedMessages.map((msg, idx) => {
+                      const prevMsg = idx > 0 ? selectedMessages[idx - 1] : null;
+                      const showDaySep = !prevMsg || !isSameCalendarDay(prevMsg.createdAt, msg.createdAt);
+                      const isStaffNote = msg.visibility === "STAFF";
+                      const isManagerMsg = msg.senderType === "MANAGER";
+                      const isCustomerMsg = msg.senderType === "CUSTOMER" || msg.senderType === "GUEST";
+                      const isSystem = msg.senderType === "SYSTEM";
+                      const isAiMsg = !isStaffNote && !isManagerMsg && !isCustomerMsg && !isSystem;
+                      const isGrouped = !showDaySep && shouldGroupChatMessages(prevMsg, msg, getConvMessageSenderKey);
 
-                    if (isSystem) {
+                      const showReceipt = !isStaffNote && isManagerMsg && idx === lastManagerMsgIdx;
+                      const receipt = showReceipt
+                        ? getAdminReceiptMeta(msg, selectedConv.counterpartyDelivery, "Khách hàng")
+                        : null;
+
                       return (
-                        <div key={msg.id || idx} className="vps-adm-system">
-                          <span>{msg.content}</span>
-                        </div>
+                        <Fragment key={msg.id || msg.clientMessageId || idx}>
+                          {showDaySep && (
+                            <div className="vps-adm-day-sep" role="separator">
+                              <span>{getDaySeparatorLabel(msg.createdAt)}</span>
+                            </div>
+                          )}
+
+                          {isSystem ? (
+                            <div className="vps-adm-system">
+                              <span>{msg.content}</span>
+                            </div>
+                          ) : (
+                            <div
+                              className={`vps-adm-msg ${isManagerMsg ? "out" : isCustomerMsg ? "in" : "bot"} ${
+                                isStaffNote ? "staff-note" : ""
+                              } ${isGrouped ? "is-grouped" : ""}`}
+                            >
+                              {!isGrouped && (
+                                <div className="vps-adm-msg-meta">
+                                  {isStaffNote ? (
+                                    <span className="vps-adm-note-badge">
+                                      <Lock size={10} aria-hidden="true" />
+                                      Ghi chú nội bộ · Khách không thấy
+                                    </span>
+                                  ) : isAiMsg ? (
+                                    <span className="vps-adm-ai-badge">
+                                      <Sparkles size={10} aria-hidden="true" />
+                                      Trợ lý AI
+                                    </span>
+                                  ) : (
+                                    <strong>
+                                      {isManagerMsg ? "Quản lý cơ sở" : selectedConv.customerName || "Khách hàng"}
+                                    </strong>
+                                  )}
+                                  <span>{formatShortClock(msg.createdAt)}</span>
+                                </div>
+                              )}
+                              <div className="vps-adm-msg-bubble" title={formatFullDateTime(msg.createdAt)}>
+                                <div>{msg.content}</div>
+                                {renderStaffCardSummary(msg)}
+                              </div>
+                              {receipt && (
+                                <div
+                                  className={`vps-adm-receipt vps-adm-receipt--${receipt.state.toLowerCase()}`}
+                                  title={receipt.tooltip}
+                                >
+                                  {receipt.state === "READ" || receipt.state === "DELIVERED" ? (
+                                    <CheckCheck size={12} aria-hidden="true" />
+                                  ) : (
+                                    <Check size={12} aria-hidden="true" />
+                                  )}
+                                  <span>{receipt.label}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Fragment>
                       );
-                    }
-
-                    const showReceipt = !isStaffNote && isManagerMsg && idx === lastManagerMsgIdx;
-                    const receipt = showReceipt
-                      ? getAdminReceiptMeta(msg, selectedConv.counterpartyDelivery, "Khách hàng")
-                      : null;
-
-                    return (
-                      <div
-                        key={msg.id || msg.clientMessageId || idx}
-                        className={`vps-adm-msg ${isManagerMsg ? "out" : isCustomerMsg ? "in" : "bot"} ${
-                          isStaffNote ? "staff-note" : ""
-                        }`}
-                      >
-                        <div className="vps-adm-msg-meta">
-                          <strong>
-                            {isStaffNote
-                              ? "Ghi chú nội bộ (Khách không thấy)"
-                              : isManagerMsg
-                                ? "Quản lý cơ sở"
-                                : isCustomerMsg
-                                  ? selectedConv.customerName || "Khách hàng"
-                                  : "Trợ lý AI"}
-                          </strong>
-                          <span>{formatShortClock(msg.createdAt)}</span>
-                        </div>
-                        <div className="vps-adm-msg-bubble">
-                          <div>{msg.content}</div>
-                          {renderStaffCardSummary(msg)}
-                        </div>
-                        {receipt && (
-                          <div
-                            className={`vps-adm-receipt vps-adm-receipt--${receipt.state.toLowerCase()}`}
-                            title={receipt.tooltip}
-                          >
-                            {receipt.state === "READ" || receipt.state === "DELIVERED" ? (
-                              <CheckCheck size={12} />
-                            ) : (
-                              <Check size={12} />
-                            )}
-                            <span>{receipt.label}</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-
-                {customerTypingByConv[Number(selectedConv.id)] && (
-                  <div className="vps-adm-typing">
-                    {customerTypingByConv[Number(selectedConv.id)]} đang soạn tin nhắn…
-                  </div>
-                )}
-
-                <div ref={streamEndRef} />
-              </div>
-
-              {/* Composer */}
-              <form className="vps-adm-composer-wrap" onSubmit={handleSendSubmit}>
-                <div className="vps-composer-modes">
-                  {isManager && (
-                    <button
-                      type="button"
-                      className={`vps-mode-switch ${composerMode === "PUBLIC" ? "active" : ""}`}
-                      onClick={() => setComposerMode("PUBLIC")}
-                    >
-                      <UserCheck size={13} /> Trả lời khách hàng
-                    </button>
+                    })
                   )}
-                  <button
-                    type="button"
-                    className={`vps-mode-switch ${composerMode === "STAFF_NOTE" ? "active note" : ""}`}
-                    onClick={() => setComposerMode("STAFF_NOTE")}
-                  >
-                    <StickyNote size={13} /> Ghi chú nội bộ (STAFF)
-                  </button>
+
+                  {customerTypingByConv[Number(selectedConv.id)] && (
+                    <div className="vps-adm-typing">
+                      {customerTypingByConv[Number(selectedConv.id)]} đang soạn tin nhắn…
+                    </div>
+                  )}
+
+                  <div ref={streamEndRef} />
                 </div>
 
-                <div className="vps-composer-row">
-                  <textarea
-                    rows={2}
-                    className="vps-adm-textarea"
-                    value={draftText}
-                    onChange={(e) => setDraftText(e.target.value)}
-                    onKeyDown={handleComposerKeyDown}
-                    disabled={composerMode === "PUBLIC" && !canSendPublicReply}
-                    placeholder={
-                      composerMode === "STAFF_NOTE"
-                        ? "Nhập ghi chú nội bộ cho Admin & Quản lý (khách hàng không thấy)…"
-                        : canSendPublicReply
-                          ? "Nhập tin nhắn gửi tới khách hàng… (Enter để gửi)"
-                          : selectedConv.handlingMode === "WAITING_HUMAN"
-                            ? "Nhấn 'Tiếp nhận ngay' ở góc trên để bắt đầu trả lời khách hàng."
-                            : "Hội thoại hiện đang ở chế độ AI hoặc đã đóng — chỉ có thể thêm ghi chú nội bộ."
-                    }
-                    aria-label="Nội dung phản hồi"
-                  />
+                {showScrollBottom && (
                   <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={!draftText.trim() || (composerMode === "PUBLIC" && !canSendPublicReply)}
+                    type="button"
+                    className="vps-scroll-bottom-btn"
+                    onClick={scrollToBottom}
                   >
-                    <Send size={16} />
-                    <span>Gửi</span>
+                    <ArrowDown size={14} aria-hidden="true" />
+                    <span>Tin mới nhất</span>
                   </button>
+                )}
+              </div>
+
+              {/* Unified Composer Card */}
+              <form className="vps-adm-composer-wrap" onSubmit={handleSendSubmit}>
+                <div className={`vps-composer-card ${composerMode === "STAFF_NOTE" ? "is-note-mode" : ""}`}>
+                  <div className="vps-composer-toolbar">
+                    <div className="vps-composer-modes">
+                      {isManager && (
+                        <button
+                          type="button"
+                          className={`vps-mode-switch ${composerMode === "PUBLIC" ? "active" : ""}`}
+                          onClick={() => setComposerMode("PUBLIC")}
+                        >
+                          <UserCheck size={13} aria-hidden="true" />
+                          <span>Trả lời khách hàng</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={`vps-mode-switch ${composerMode === "STAFF_NOTE" ? "active note" : ""}`}
+                        onClick={() => setComposerMode("STAFF_NOTE")}
+                      >
+                        <StickyNote size={13} aria-hidden="true" />
+                        <span>Ghi chú nội bộ (STAFF)</span>
+                      </button>
+                    </div>
+
+                    {isManager && canSendPublicReply && composerMode === "PUBLIC" && (
+                      <button
+                        type="button"
+                        className="vps-ai-draft-btn"
+                        disabled={busyAction || draftingAi}
+                        onClick={handleAiDraft}
+                        title="Nhờ AI gợi ý câu trả lời dựa trên lịch sử hội thoại"
+                      >
+                        {draftingAi ? (
+                          <Loader2 size={13} className="vps-adm-spin" aria-hidden="true" />
+                        ) : (
+                          <Sparkles size={13} aria-hidden="true" />
+                        )}
+                        <span>{draftingAi ? "Đang gợi ý…" : "Gợi ý AI"}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="vps-composer-row">
+                    <textarea
+                      rows={1}
+                      className="vps-adm-textarea"
+                      value={draftText}
+                      onChange={(e) => setDraftText(e.target.value)}
+                      onKeyDown={handleComposerKeyDown}
+                      disabled={composerMode === "PUBLIC" && !canSendPublicReply}
+                      placeholder={
+                        composerMode === "STAFF_NOTE"
+                          ? "Nhập ghi chú nội bộ cho Admin & Quản lý (khách hàng không thấy)…"
+                          : canSendPublicReply
+                            ? "Nhập tin nhắn gửi tới khách hàng… (Enter gửi, Shift+Enter xuống dòng)"
+                            : selectedConv.handlingMode === "WAITING_HUMAN"
+                              ? "Nhấn 'Tiếp nhận ngay' ở góc trên để bắt đầu trả lời khách hàng."
+                              : "Hội thoại hiện đang ở chế độ AI hoặc đã đóng — chỉ có thể thêm ghi chú nội bộ."
+                      }
+                      aria-label={
+                        composerMode === "STAFF_NOTE"
+                          ? "Nội dung ghi chú nội bộ"
+                          : "Nội dung phản hồi khách hàng"
+                      }
+                    />
+                    <button
+                      type="submit"
+                      className={`btn ${
+                        composerMode === "STAFF_NOTE" ? "vps-send-btn--note" : "btn-primary"
+                      } vps-send-btn`}
+                      disabled={!draftText.trim() || (composerMode === "PUBLIC" && !canSendPublicReply)}
+                    >
+                      {composerMode === "STAFF_NOTE" ? (
+                        <Lock size={14} aria-hidden="true" />
+                      ) : (
+                        <Send size={15} aria-hidden="true" />
+                      )}
+                      <span>{composerMode === "STAFF_NOTE" ? "Lưu ghi chú" : "Gửi"}</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             </>

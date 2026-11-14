@@ -20,7 +20,7 @@ export default function FinancialDetailLedgerModal({
   const [error, setError] = useState('');
 
   const [selectedMonth, setSelectedMonth] = useState(
-    periodFilters?.month ? Number(periodFilters.month) : 11,
+    periodFilters?.month ? Number(periodFilters.month) : new Date().getMonth() + 1,
   );
   const [ledgerForm, setLedgerForm] = useState(null);
   const [profileForm, setProfileForm] = useState(null);
@@ -49,7 +49,7 @@ export default function FinancialDetailLedgerModal({
     const prof = dataPayload?.property?.profile;
     if (existingLedger) {
       setLedgerForm({
-        period_year: periodFilters?.year || 2026,
+        period_year: periodFilters?.year || new Date().getFullYear(),
         period_month: Number(m),
         ancillary_service_revenue: Number(existingLedger.ancillary_service_revenue || 0),
         other_rental_revenue: Number(existingLedger.other_rental_revenue || 0),
@@ -61,13 +61,13 @@ export default function FinancialDetailLedgerModal({
         manager_salary_cost: Number(existingLedger.manager_salary_cost || 0),
         staff_payroll_cost: Number(existingLedger.staff_payroll_cost || 0),
         other_operating_cost: Number(existingLedger.other_operating_cost || 0),
-        staff_headcount_snapshot: Number(existingLedger.staff_headcount_snapshot || prof?.staff_headcount || 8),
+        staff_headcount_snapshot: Number(existingLedger.staff_headcount_snapshot ?? prof?.staff_headcount ?? 8),
         is_locked: Boolean(existingLedger.is_locked),
         note: existingLedger.note || '',
       });
     } else if (prof) {
       setLedgerForm({
-        period_year: periodFilters?.year || 2026,
+        period_year: periodFilters?.year || new Date().getFullYear(),
         period_month: Number(m),
         ancillary_service_revenue: 0,
         other_rental_revenue: 0,
@@ -79,7 +79,7 @@ export default function FinancialDetailLedgerModal({
         manager_salary_cost: Number(prof.manager_base_salary || 0),
         staff_payroll_cost: Number(prof.staff_monthly_payroll || 0),
         other_operating_cost: Number(prof.other_fixed_opex || 0),
-        staff_headcount_snapshot: Number(prof.staff_headcount || 8),
+        staff_headcount_snapshot: Number(prof.staff_headcount ?? 8),
         is_locked: false,
         note: '',
       });

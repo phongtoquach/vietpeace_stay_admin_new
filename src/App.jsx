@@ -192,7 +192,7 @@ export default function App() {
 						<Route path="settings/website" element={<AdminOnlyRoute><WebsiteSettingsPage /></AdminOnlyRoute>} />
 
 						{/* Hỗ trợ & Chat AI / Quản lý / Nội bộ / Báo cáo */}
-						<Route path="chat" element={<PermissionRoute permission="chat.conversation.read"><ChatOperations /></PermissionRoute>} />
+						<Route path="chat" element={<PermissionRoute permission="chat.read"><ChatOperations /></PermissionRoute>} />
 						<Route path="chat/internal" element={<PermissionRoute permission="chat.internal.read"><InternalChatPage /></PermissionRoute>} />
 						<Route path="chat/reports" element={<AdminOnlyRoute><ChatReportsPage /></AdminOnlyRoute>} />
 					</Route>

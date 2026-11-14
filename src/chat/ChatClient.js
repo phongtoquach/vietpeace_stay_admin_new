@@ -167,16 +167,18 @@ class AdminChatClient {
     return request("/reports/summary");
   }
 
-  listMissedHandoffs({ unreadOnly = false } = {}) {
-    return request(`/reports/missed-handoffs?unreadOnly=${unreadOnly ? "true" : "false"}`);
+  listMissedHandoffs({ unreadOnly = false, limit = 50, offset = 0 } = {}) {
+    const query = new URLSearchParams({ unreadOnly: String(unreadOnly), limit: String(limit), offset: String(offset) });
+    return request(`/reports/missed-handoffs?${query}`);
   }
 
   ackMissedHandoff(id) {
     return request(`/reports/missed-handoffs/${id}/ack`, { method: "POST", body: {} });
   }
 
-  listRatings(status = "ALL") {
-    return request(`/ratings?status=${encodeURIComponent(status)}`);
+  listRatings(status = "ALL", { limit = 50, offset = 0 } = {}) {
+    const query = new URLSearchParams({ status, limit: String(limit), offset: String(offset) });
+    return request(`/ratings?${query}`);
   }
 
   reviewRating(ratingId, { decision, reviewNote }) {
@@ -186,10 +188,10 @@ class AdminChatClient {
     });
   }
 
-  sendWarningEmail(ratingId, { adminNote }) {
+  sendWarningEmail(ratingId, { adminNote, subject, emailBody }) {
     return request(`/ratings/${ratingId}/warning-email`, {
       method: "POST",
-      body: { adminNote },
+      body: { adminNote, subject, emailBody },
     });
   }
 
@@ -209,25 +211,31 @@ class AdminChatClient {
       }
 
       const { ticket } = await this.getSocketTicket();
+      let pendingInitialTicket = ticket;
+
       const socket = io(`${BACKEND_BASE}/chat`, {
         path: "/socket.io",
         withCredentials: true,
         transports: ["websocket", "polling"],
-        auth: { ticket },
-        reconnection: true,
-        reconnectionAttempts: 8,
-        reconnectionDelay: 1200,
-      });
-
-      socket.on("connect_error", async (err) => {
-        if (/TICKET|TOKEN|SESSION|401|403/i.test(String(err?.message || ""))) {
-          try {
-            const refreshed = await this.getSocketTicket();
-            socket.auth = { ticket: refreshed.ticket };
-          } catch {
-            // let reconnect backoff handle
+        auth: (cb) => {
+          if (pendingInitialTicket) {
+            const first = pendingInitialTicket;
+            pendingInitialTicket = null;
+            cb({ ticket: first });
+            return;
           }
-        }
+          this.getSocketTicket()
+            .then((refreshed) => {
+              cb({ ticket: refreshed?.ticket || "" });
+            })
+            .catch(() => {
+              cb({});
+            });
+        },
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1500,
+        reconnectionDelayMax: 8000,
       });
 
       this.socket = socket;

@@ -13,6 +13,33 @@ import { adminChatClient } from "./ChatClient";
 
 const AdminChatContext = createContext(null);
 
+function playHandoffChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    [880, 1174.66].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+      gain.gain.setValueAtTime(0.0001, now + idx * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.14, now + idx * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.14 + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.14);
+      osc.stop(now + idx * 0.14 + 0.3);
+    });
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 800);
+  } catch {
+    // Ignore browser autoplay restrictions before interaction
+  }
+}
+
 export function AdminChatProvider({ children }) {
   const { currentLoggedInUser, isCheckingAuthen } = useContext(AuthContext) || {};
   const { showToast } = useAdmin() || {};
@@ -32,7 +59,8 @@ export function AdminChatProvider({ children }) {
     confirmedViolationsCount: 0,
     totalBadgeCount: 0,
   });
-  const [pendingHandoffAlerts, setPendingHandoffAlerts] = useState([]);
+  const [handoffMetadataByConv, setHandoffMetadataByConv] = useState({});
+  const [dismissedHandoffKeys, setDismissedHandoffKeys] = useState([]);
   const [socketConnected, setSocketConnected] = useState(false);
 
   // Shared live message caches keyed by conversationId / threadId
@@ -48,6 +76,9 @@ export function AdminChatProvider({ children }) {
   const userIdRef = useRef(userId);
   const userRoleRef = useRef(userRole);
   const showToastRef = useRef(showToast);
+  const bootedUserIdRef = useRef(null);
+  const notifiedHandoffKeysRef = useRef(new Set());
+  const baseTitleRef = useRef(null);
 
   useEffect(() => {
     activeConvIdRef.current = activeConvId;
@@ -57,11 +88,35 @@ export function AdminChatProvider({ children }) {
     showToastRef.current = showToast;
   }, [activeConvId, activeThreadId, userId, userRole, showToast]);
 
-  const refreshConversations = useCallback(async (filters = {}) => {
-    const res = await adminChatClient.listConversations(filters);
-    setConversations(res.items || []);
-    return res.items || [];
+  const notifyHandoffAlert = useCallback((handoffKey, accommodationName, requesterName) => {
+    if (!handoffKey || notifiedHandoffKeysRef.current.has(handoffKey)) return;
+    notifiedHandoffKeysRef.current.add(handoffKey);
+    if (userRoleRef.current === "ACCOMMODATION_MANAGER") {
+      playHandoffChime();
+      showToastRef.current?.(
+        `${requesterName || "Khách hàng"} yêu cầu gặp Quản lý tại ${accommodationName || "cơ sở"} (hạn 5 phút)!`,
+        "warning",
+      );
+    }
   }, []);
+
+  const refreshConversations = useCallback(
+    async (filters = {}) => {
+      const res = await adminChatClient.listConversations(filters);
+      const items = res.items || [];
+      setConversations(items);
+      if (userRoleRef.current === "ACCOMMODATION_MANAGER") {
+        items.forEach((c) => {
+          if (c.handlingMode === "WAITING_HUMAN" && c.status === "OPEN") {
+            const key = `${Number(c.id)}:${c.currentHandoffId || ""}`;
+            notifyHandoffAlert(key, c.accommodationName, c.customerName);
+          }
+        });
+      }
+      return items;
+    },
+    [notifyHandoffAlert],
+  );
 
   const refreshInternalThreads = useCallback(async () => {
     const res = await adminChatClient.listInternalThreads();
@@ -158,6 +213,11 @@ export function AdminChatProvider({ children }) {
         if (userRoleRef.current === "ACCOMMODATION_MANAGER") {
           adminChatClient.syncDeliveredAll().catch(() => {});
         }
+        refreshConversations().catch(() => {});
+        refreshInternalThreads().catch(() => {});
+        if (userRoleRef.current === "ADMIN") {
+          refreshReportsSummary().catch(() => {});
+        }
         if (activeConvIdRef.current) {
           socket.emit("conversation:join", { conversationId: activeConvIdRef.current });
         }
@@ -170,32 +230,69 @@ export function AdminChatProvider({ children }) {
         setSocketConnected(false);
       });
 
-      socket.on("conversation:updated", ({ conversation }) => {
-        if (conversation) upsertConversation(conversation);
+      socket.on("conversation:updated", (payload) => {
+        if (payload?.conversation) {
+          upsertConversation(payload.conversation);
+        } else if (payload?.conversationId && payload?.handlingMode) {
+          upsertConversation({
+            id: Number(payload.conversationId),
+            handlingMode: payload.handlingMode,
+            ...(payload.assignedUserId !== undefined ? { assignedUserId: payload.assignedUserId } : {}),
+            ...(payload.assignedManagerName !== undefined ? { assignedManagerName: payload.assignedManagerName } : {}),
+            ...(payload.currentHandoffId !== undefined ? { currentHandoffId: payload.currentHandoffId } : {}),
+            ...(payload.managerWaitExpiresAt !== undefined ? { managerWaitExpiresAt: payload.managerWaitExpiresAt } : {}),
+            ...(payload.retentionState !== undefined ? { retentionState: payload.retentionState } : {}),
+          });
+        }
+        const cid = Number(payload?.conversation?.id || payload?.conversationId || 0);
+        const nextMode = payload?.conversation?.handlingMode || payload?.handlingMode;
+        if (cid && nextMode && nextMode !== "WAITING_HUMAN") {
+          setHandoffMetadataByConv((prev) => {
+            if (!prev[cid]) return prev;
+            const next = { ...prev };
+            delete next[cid];
+            return next;
+          });
+        }
         refreshConversations().catch(() => {});
       });
 
-      socket.on("queue:updated", () => {
+      socket.on("queue:updated", (payload) => {
+        const cid = Number(payload?.conversationId || 0);
+        if (cid && payload?.action && payload.action !== "REQUESTED") {
+          setHandoffMetadataByConv((prev) => {
+            if (!prev[cid]) return prev;
+            const next = { ...prev };
+            delete next[cid];
+            return next;
+          });
+        }
         refreshConversations().catch(() => {});
       });
 
       socket.on("handoff:requested", (payload) => {
-        setPendingHandoffAlerts((prev) => {
-          const cid = Number(payload.conversationId);
-          const filtered = prev.filter((x) => Number(x.conversationId) !== cid);
-          return [payload, ...filtered].slice(0, 10);
-        });
-        showToastRef.current?.(
-          `Khách yêu cầu gặp Quản lý tại ${payload.accommodationName || "cơ sở"} (hạn 5 phút)!`,
-          "warning",
-        );
+        const cid = Number(payload?.conversationId || 0);
+        if (cid) {
+          setHandoffMetadataByConv((prev) => ({
+            ...prev,
+            [cid]: { ...payload, conversationId: cid },
+          }));
+          const key = `${cid}:${payload?.handoffId || ""}`;
+          notifyHandoffAlert(key, payload?.accommodationName, payload?.requesterName);
+        }
         refreshConversations().catch(() => {});
       });
 
       socket.on("handoff:missed", (payload) => {
-        setPendingHandoffAlerts((prev) =>
-          prev.filter((x) => Number(x.conversationId) !== Number(payload?.conversationId)),
-        );
+        const cid = Number(payload?.conversationId || 0);
+        if (cid) {
+          setHandoffMetadataByConv((prev) => {
+            if (!prev[cid]) return prev;
+            const next = { ...prev };
+            delete next[cid];
+            return next;
+          });
+        }
         refreshConversations().catch(() => {});
         if (userRoleRef.current === "ADMIN") {
           refreshReportsSummary().catch(() => {});
@@ -348,6 +445,7 @@ export function AdminChatProvider({ children }) {
     [
       appendConvMessage,
       appendInternalMessage,
+      notifyHandoffAlert,
       refreshConversations,
       refreshInternalThreads,
       refreshReportsSummary,
@@ -356,22 +454,39 @@ export function AdminChatProvider({ children }) {
     ],
   );
 
-  // Key socket + initial loads strictly on stable userId
+  // Key socket + initial loads strictly on userId; preserve live state across route transitions
   useEffect(() => {
     let cancelled = false;
     async function syncBoot() {
       await Promise.resolve();
       if (cancelled) return;
-      if (isCheckingAuthen || !userId) {
-        adminChatClient.disconnectSocket();
-        setSocketConnected(false);
-        setConversations([]);
-        setInternalThreads([]);
-        setConvMessagesById({});
-        setInternalMessagesById({});
-        setPendingHandoffAlerts([]);
+
+      if (!userId) {
+        if (!isCheckingAuthen) {
+          bootedUserIdRef.current = null;
+          notifiedHandoffKeysRef.current.clear();
+          adminChatClient.disconnectSocket();
+          setSocketConnected(false);
+          setConversations([]);
+          setInternalThreads([]);
+          setConvMessagesById({});
+          setInternalMessagesById({});
+          setHandoffMetadataByConv({});
+          setDismissedHandoffKeys([]);
+        }
         return;
       }
+
+      // AuthContext toggles isCheckingAuthen=true on route navigation; keep active session alive
+      if (isCheckingAuthen) {
+        return;
+      }
+
+      if (bootedUserIdRef.current === userId && adminChatClient.socket?.connected) {
+        refreshConversations().catch(() => {});
+        return;
+      }
+
       try {
         const me = await adminChatClient.getMe();
         if (cancelled) return;
@@ -384,9 +499,15 @@ export function AdminChatProvider({ children }) {
         ]);
 
         const socket = await adminChatClient.connectSocket();
-        if (!cancelled && !socket._vpsAdminListenersAttached) {
-          attachSocketListeners(socket);
-          socket._vpsAdminListenersAttached = true;
+        if (!cancelled) {
+          bootedUserIdRef.current = userId;
+          if (!socket._vpsAdminListenersAttached) {
+            attachSocketListeners(socket);
+            socket._vpsAdminListenersAttached = true;
+          }
+          if (socket.connected) {
+            setSocketConnected(true);
+          }
         }
       } catch (err) {
         console.error("[AdminChatContext.boot]", err);
@@ -406,10 +527,136 @@ export function AdminChatProvider({ children }) {
     refreshReportsSummary,
   ]);
 
-  const waitingCount = useMemo(
-    () => conversations.filter((c) => c.handlingMode === "WAITING_HUMAN" && c.status === "OPEN").length,
+  // Tab focus, visibility resume, and fallback polling sync so missed handoff events always surface
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    const syncNow = () => {
+      refreshConversations().catch(() => {});
+      refreshInternalThreads().catch(() => {});
+      if (userRoleRef.current === "ADMIN") {
+        refreshReportsSummary().catch(() => {});
+      }
+      if (!adminChatClient.socket?.connected) {
+        adminChatClient.connectSocket()
+          .then((socket) => {
+            if (!socket._vpsAdminListenersAttached) {
+              attachSocketListeners(socket);
+              socket._vpsAdminListenersAttached = true;
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        syncNow();
+      }
+    };
+
+    window.addEventListener("focus", syncNow);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalMs = socketConnected ? 25000 : 10000;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible" || !socketConnected) {
+        refreshConversations().catch(() => {});
+        if (userRoleRef.current === "ADMIN") {
+          refreshReportsSummary().catch(() => {});
+        }
+      }
+    }, intervalMs);
+
+    return () => {
+      window.removeEventListener("focus", syncNow);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(timer);
+    };
+  }, [userId, socketConnected, attachSocketListeners, refreshConversations, refreshInternalThreads, refreshReportsSummary]);
+
+  const waitingConversations = useMemo(
+    () =>
+      conversations
+        .filter((c) => c.handlingMode === "WAITING_HUMAN" && c.status === "OPEN")
+        .sort(
+          (a, b) =>
+            new Date(a.managerWaitExpiresAt || a.updatedAt || 0) -
+            new Date(b.managerWaitExpiresAt || b.updatedAt || 0),
+        ),
     [conversations],
   );
+
+  const pendingHandoffAlerts = useMemo(() => {
+    const seenConvIds = new Set();
+    const list = [];
+
+    waitingConversations.forEach((c) => {
+      const cid = Number(c.id);
+      seenConvIds.add(cid);
+      const meta = handoffMetadataByConv[cid] || {};
+      const handoffId = c.currentHandoffId ?? meta.handoffId ?? "";
+      const dismissKey = `${cid}:${handoffId}`;
+      if (dismissedHandoffKeys.includes(dismissKey)) return;
+      list.push({
+        conversationId: cid,
+        handoffId,
+        requesterName: meta.requesterName || c.customerName || "Khách hàng",
+        accommodationId: c.accommodationId,
+        accommodationName: meta.accommodationName || c.accommodationName || "cơ sở",
+        expiresAt: c.managerWaitExpiresAt || meta.expiresAt || null,
+        lastMessagePreview: c.lastMessagePreview || "",
+        dismissKey,
+      });
+    });
+
+    Object.values(handoffMetadataByConv).forEach((meta) => {
+      const cid = Number(meta?.conversationId || 0);
+      if (!cid || seenConvIds.has(cid)) return;
+      if (conversations.some((c) => Number(c.id) === cid)) return;
+      const handoffId = meta.handoffId ?? "";
+      const dismissKey = `${cid}:${handoffId}`;
+      if (dismissedHandoffKeys.includes(dismissKey)) return;
+      list.push({
+        conversationId: cid,
+        handoffId,
+        requesterName: meta.requesterName || "Khách hàng",
+        accommodationId: meta.accommodationId || null,
+        accommodationName: meta.accommodationName || "cơ sở",
+        expiresAt: meta.expiresAt || null,
+        lastMessagePreview: "",
+        dismissKey,
+      });
+    });
+
+    return list;
+  }, [waitingConversations, handoffMetadataByConv, conversations, dismissedHandoffKeys]);
+
+  const dismissHandoffAlert = useCallback(
+    (cid) => {
+      const numCid = Number(cid);
+      const target = pendingHandoffAlerts.find((a) => Number(a.conversationId) === numCid);
+      const key = target?.dismissKey || `${numCid}:`;
+      setDismissedHandoffKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    },
+    [pendingHandoffAlerts],
+  );
+
+  const waitingCount = waitingConversations.length;
+
+  useEffect(() => {
+    if (!baseTitleRef.current) {
+      baseTitleRef.current = document.title || "VietPeace Stay";
+    }
+    const baseTitle = baseTitleRef.current;
+    if (isManager && waitingCount > 0) {
+      document.title = `(${waitingCount}) Khách chờ Quản lý · ${baseTitle}`;
+    } else {
+      document.title = baseTitle;
+    }
+    return () => {
+      document.title = baseTitle;
+    };
+  }, [isManager, waitingCount]);
 
   const internalUnread = useMemo(
     () => internalThreads.reduce((sum, t) => sum + Number(t.unreadCount || 0), 0),
@@ -424,6 +671,7 @@ export function AdminChatProvider({ children }) {
     chatMe,
     socketConnected,
     conversations,
+    waitingConversations,
     setConversations,
     upsertConversation,
     refreshConversations,
@@ -446,8 +694,7 @@ export function AdminChatProvider({ children }) {
     refreshReportsSummary,
     reportsRefreshTick,
     pendingHandoffAlerts,
-    dismissHandoffAlert: (cid) =>
-      setPendingHandoffAlerts((prev) => prev.filter((x) => Number(x.conversationId) !== Number(cid))),
+    dismissHandoffAlert,
     waitingCount,
     internalUnread,
     reportsBadge,

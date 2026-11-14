@@ -89,6 +89,27 @@
   pointer-events: none;
 }
 
+.header-chat-alert-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid #F59E0B;
+  background-color: #FFFBEB;
+  color: #92400E;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  animation: vpsNotifPulse 2s ease-in-out infinite;
+}
+
+.header-chat-alert-pill:hover {
+  background-color: #FEF3C7;
+}
+
 .header-notification-btn {
   width: 34px;
   height: 34px;
@@ -102,14 +123,42 @@
   background-color: var(--color-content-bg);
 }
 
+.header-notification-btn.has-urgent {
+  border-color: #F59E0B;
+  background-color: #FFFBEB;
+  color: #92400E;
+}
+
 .notification-badge {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 7px;
-  height: 7px;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
   background-color: var(--color-danger);
-  border-radius: 50%;
+  color: #FFFFFF;
+  border: 1.5px solid #FFFFFF;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-badge--urgent {
+  animation: vpsNotifPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes vpsNotifPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(217, 119, 6, 0);
+  }
 }
 
 .header-user-menu {
@@ -359,6 +408,14 @@
   background-color: var(--color-pale-yellow);
   color: #8C5A00;
   border: 1px solid #EED48C;
+}
+
+.sidebar-badge--urgent {
+  background-color: #DC2626;
+  color: #FFFFFF;
+  border-color: #DC2626;
+  font-weight: 700;
+  animation: vpsNotifPulse 1.8s ease-in-out infinite;
 }
 
 /* Breadcrumb */

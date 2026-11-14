@@ -434,10 +434,10 @@ export default function Sidebar() {
         )}
 
         {/* Hỗ trợ & Chat */}
-        {(isAdmin || hasPermission('chat.conversation.read') || hasPermission('chat.internal.read')) && (
+        {(isAdmin || hasPermission('chat.read') || hasPermission('chat.internal.read')) && (
           <>
             <div className="sidebar-group-title">Hỗ trợ &amp; Chat</div>
-            {(isAdmin || hasPermission('chat.conversation.read')) && (
+            {(isAdmin || hasPermission('chat.read')) && (
               <NavLink
                 to="/admin/chat"
                 end
@@ -446,7 +446,9 @@ export default function Sidebar() {
               >
                 <MessageSquare size={16} className="sidebar-icon" />
                 <span>Tư vấn khách hàng</span>
-                {waitingCount > 0 && <span className="sidebar-badge">{waitingCount}</span>}
+                {waitingCount > 0 && (
+                  <span className="sidebar-badge sidebar-badge--urgent">{waitingCount}</span>
+                )}
               </NavLink>
             )}
             {(isAdmin || hasPermission('chat.internal.read')) && (

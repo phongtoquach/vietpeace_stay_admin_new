@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:chat:reports": "node --test test/chat-reports.browser.test.js",
+    "test:modules": "node --test --test-concurrency=1 test/form_validation.test.js test/pricing_configuration.test.js test/pricing_manager.test.js test/financial.browser.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
