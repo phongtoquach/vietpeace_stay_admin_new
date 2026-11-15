@@ -32,9 +32,8 @@ import {
   getDaySeparatorLabel,
   getHandlingModeMeta,
   getInitials,
+  groupChatMessages,
   isImeComposing,
-  isSameCalendarDay,
-  shouldGroupChatMessages,
 } from "./chatUtils";
 import { makeClientMsgId } from "./InternalChatStore";
 import "./chat.css";
@@ -538,7 +537,7 @@ export default function ChatOperations() {
                 <option value="">Tất cả cơ sở lưu trú</option>
                 {superviseAccoms.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} ({a.totalConversations})
+                    {a.accommodationName || a.name || `Cơ sở #${a.id}`} ({Number(a.conversationCount ?? a.totalConversations ?? 0)})
                   </option>
                 ))}
               </select>
@@ -639,9 +638,6 @@ export default function ChatOperations() {
                   <div className="vps-main-identity-text">
                     <div className="vps-main-title-row">
                       <h2 className="vps-ellipsis">{selectedConv.customerName || "Khách hàng"}</h2>
-                      <span className={`vps-mode-chip vps-mode-chip--${selectedModeMeta.tone}`}>
-                        {selectedModeMeta.fullLabel}
-                      </span>
                     </div>
                     <div
                       className="vps-main-meta"
@@ -751,78 +747,91 @@ export default function ChatOperations() {
                       <Loader2 size={20} className="vps-adm-spin" /> Đang tải lịch sử hội thoại…
                     </div>
                   ) : (
-                    selectedMessages.map((msg, idx) => {
-                      const prevMsg = idx > 0 ? selectedMessages[idx - 1] : null;
-                      const showDaySep = !prevMsg || !isSameCalendarDay(prevMsg.createdAt, msg.createdAt);
-                      const isStaffNote = msg.visibility === "STAFF";
-                      const isManagerMsg = msg.senderType === "MANAGER";
-                      const isCustomerMsg = msg.senderType === "CUSTOMER" || msg.senderType === "GUEST";
-                      const isSystem = msg.senderType === "SYSTEM";
-                      const isAiMsg = !isStaffNote && !isManagerMsg && !isCustomerMsg && !isSystem;
-                      const isGrouped = !showDaySep && shouldGroupChatMessages(prevMsg, msg, getConvMessageSenderKey);
+                    groupChatMessages(selectedMessages, getConvMessageSenderKey).map((entry) => {
+                      if (entry.type === "SYSTEM") {
+                        return (
+                          <Fragment key={entry.key}>
+                            {entry.showDaySep && (
+                              <div className="vps-adm-day-sep" role="separator">
+                                <span>{getDaySeparatorLabel(entry.msg.createdAt)}</span>
+                              </div>
+                            )}
+                            <div className="vps-adm-system">
+                              <span>{entry.msg.content}</span>
+                            </div>
+                          </Fragment>
+                        );
+                      }
 
-                      const showReceipt = !isStaffNote && isManagerMsg && idx === lastManagerMsgIdx;
+                      const firstMsg = entry.firstMsg;
+                      const lastMsg = entry.lastMsg;
+                      const isStaffNote = firstMsg.visibility === "STAFF";
+                      const isManagerMsg = firstMsg.senderType === "MANAGER";
+                      const isCustomerMsg = firstMsg.senderType === "CUSTOMER" || firstMsg.senderType === "GUEST";
+                      const isAiMsg = !isStaffNote && !isManagerMsg && !isCustomerMsg;
+
+                      const showReceipt = !isStaffNote && isManagerMsg && entry.lastIndex === lastManagerMsgIdx;
                       const receipt = showReceipt
-                        ? getAdminReceiptMeta(msg, selectedConv.counterpartyDelivery, "Khách hàng")
+                        ? getAdminReceiptMeta(lastMsg, selectedConv.counterpartyDelivery, "Khách hàng")
                         : null;
 
                       return (
-                        <Fragment key={msg.id || msg.clientMessageId || idx}>
-                          {showDaySep && (
+                        <Fragment key={entry.key}>
+                          {entry.showDaySep && (
                             <div className="vps-adm-day-sep" role="separator">
-                              <span>{getDaySeparatorLabel(msg.createdAt)}</span>
+                              <span>{getDaySeparatorLabel(firstMsg.createdAt)}</span>
                             </div>
                           )}
 
-                          {isSystem ? (
-                            <div className="vps-adm-system">
-                              <span>{msg.content}</span>
-                            </div>
-                          ) : (
-                            <div
-                              className={`vps-adm-msg ${isManagerMsg ? "out" : isCustomerMsg ? "in" : "bot"} ${
-                                isStaffNote ? "staff-note" : ""
-                              } ${isGrouped ? "is-grouped" : ""}`}
-                            >
-                              {!isGrouped && (
-                                <div className="vps-adm-msg-meta">
-                                  {isStaffNote ? (
-                                    <span className="vps-adm-note-badge">
-                                      <Lock size={10} aria-hidden="true" />
-                                      Ghi chú nội bộ · Khách không thấy
-                                    </span>
-                                  ) : isAiMsg ? (
-                                    <span className="vps-adm-ai-badge">
-                                      <Sparkles size={10} aria-hidden="true" />
-                                      Trợ lý AI
-                                    </span>
-                                  ) : (
-                                    <strong>
-                                      {isManagerMsg ? "Quản lý cơ sở" : selectedConv.customerName || "Khách hàng"}
-                                    </strong>
-                                  )}
-                                  <span>{formatShortClock(msg.createdAt)}</span>
-                                </div>
+                          <div
+                            className={`vps-adm-msg ${isManagerMsg ? "out" : isCustomerMsg ? "in" : "bot"} ${
+                              isStaffNote ? "staff-note" : ""
+                            }`}
+                          >
+                            <div className="vps-adm-msg-meta">
+                              {isStaffNote ? (
+                                <span className="vps-adm-note-badge">
+                                  <Lock size={10} aria-hidden="true" />
+                                  Ghi chú nội bộ · Khách không thấy
+                                </span>
+                              ) : isAiMsg ? (
+                                <span className="vps-adm-ai-badge">
+                                  <Sparkles size={10} aria-hidden="true" />
+                                  Trợ lý AI
+                                </span>
+                              ) : (
+                                <strong>
+                                  {isManagerMsg ? "Quản lý cơ sở" : selectedConv.customerName || "Khách hàng"}
+                                </strong>
                               )}
-                              <div className="vps-adm-msg-bubble" title={formatFullDateTime(msg.createdAt)}>
-                                <div>{msg.content}</div>
-                                {renderStaffCardSummary(msg)}
-                              </div>
-                              {receipt && (
+                              <span>{formatShortClock(firstMsg.createdAt)}</span>
+                            </div>
+                            <div className="vps-adm-msg-bubble">
+                              {entry.items.map((item, itemIdx) => (
                                 <div
-                                  className={`vps-adm-receipt vps-adm-receipt--${receipt.state.toLowerCase()}`}
-                                  title={receipt.tooltip}
+                                  key={item.id || item.clientMessageId || itemIdx}
+                                  className="vps-adm-msg-part"
+                                  title={formatFullDateTime(item.createdAt)}
                                 >
-                                  {receipt.state === "READ" || receipt.state === "DELIVERED" ? (
-                                    <CheckCheck size={12} aria-hidden="true" />
-                                  ) : (
-                                    <Check size={12} aria-hidden="true" />
-                                  )}
-                                  <span>{receipt.label}</span>
+                                  {item.content && <div className="vps-adm-msg-text">{item.content}</div>}
+                                  {renderStaffCardSummary(item)}
                                 </div>
-                              )}
+                              ))}
                             </div>
-                          )}
+                            {receipt && (
+                              <div
+                                className={`vps-adm-receipt vps-adm-receipt--${receipt.state.toLowerCase()}`}
+                                title={receipt.tooltip}
+                              >
+                                {receipt.state === "READ" || receipt.state === "DELIVERED" ? (
+                                  <CheckCheck size={12} aria-hidden="true" />
+                                ) : (
+                                  <Check size={12} aria-hidden="true" />
+                                )}
+                                <span>{receipt.label}</span>
+                              </div>
+                            )}
+                          </div>
                         </Fragment>
                       );
                     })
@@ -870,7 +879,7 @@ export default function ChatOperations() {
                         onClick={() => setComposerMode("STAFF_NOTE")}
                       >
                         <StickyNote size={13} aria-hidden="true" />
-                        <span>Ghi chú nội bộ (STAFF)</span>
+                        <span>Ghi chú nội bộ</span>
                       </button>
                     </div>
 

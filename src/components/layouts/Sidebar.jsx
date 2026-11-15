@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { pricingPath } from '../../pages/pricing/pricingUtils';
 import { useAdmin } from '../../context/AdminContext.jsx';
@@ -7,6 +7,7 @@ import { useAdminChat } from '../../chat/ChatContext.jsx';
 import {
   LayoutDashboard,
   CalendarCheck,
+  DoorOpen,
   Building2,
   MapPin,
   CircleDollarSign,
@@ -45,57 +46,62 @@ export default function Sidebar() {
 
 
   const isRevenuePage = location.pathname.startsWith('/admin/reports/revenue');
-  const activeReportTab = new URLSearchParams(location.search).get('tab') || 'pnl';
+  const locationSearchParams = new URLSearchParams(location.search);
+  const activeReportTab = locationSearchParams.get('tab') || 'pnl';
+  const currentStayStatus = locationSearchParams.get('stayStatus');
+  const isStayBookingPage =
+    location.pathname.startsWith('/admin/bookings') &&
+    (currentStayStatus === 'checkin' || currentStayStatus === 'checkout');
+  const isBookingParentActive =
+    location.pathname.startsWith('/admin/bookings') && !isStayBookingPage;
 
-  // Expanded menu sections state (mặc định thu gọn toàn bộ mục con)
-  const [expandedSections, setExpandedSections] = useState({
-    bookings: false,
-    accommodations: false,
-    pricing: false,
-    reports: false,
-    users: false,
-    settings: false,
-  });
+  const [sectionOverrides, setSectionOverrides] = useState({});
+  const currentRouteKey = `${location.pathname}${location.search}`;
+  const currentPath = location.pathname;
+
+  // Tự động mở mục cha theo route hiện tại
+  const autoExpandedSections = {
+    bookings: currentPath.startsWith('/admin/bookings') && !isStayBookingPage,
+    stayOperations: isStayBookingPage,
+    accommodations:
+      currentPath.startsWith('/admin/accommodations') ||
+      currentPath.startsWith('/admin/room-types') ||
+      currentPath.startsWith('/admin/amenities'),
+    pricing:
+      currentPath.startsWith('/admin/rate-periods') ||
+      currentPath.startsWith('/admin/room-rates') ||
+      currentPath.startsWith('/admin/room-availability') ||
+      currentPath.startsWith('/admin/pricing-history') ||
+      currentPath.startsWith('/admin/pricing-proposals'),
+    reports: currentPath.startsWith('/admin/reports'),
+    users:
+      currentPath.startsWith('/admin/users') ||
+      currentPath.startsWith('/admin/roles') ||
+      currentPath.startsWith('/admin/managers'),
+    settings: currentPath.startsWith('/admin/settings'),
+  };
+
+  const expandedSections = Object.fromEntries(
+    Object.keys(autoExpandedSections).map((key) => {
+      const entry = sectionOverrides[key];
+      const isOpen =
+        entry?.route === currentRouteKey
+          ? entry.open
+          : Boolean(entry?.open || autoExpandedSections[key]);
+      return [key, isOpen];
+    }),
+  );
 
   // Count pending bookings for the badge
   const pendingCount = bookings.filter((b) => b.status === 'PENDING').length;
 
-  // Auto-expand parents when child route matches
-  useEffect(() => {
-    const path = location.pathname;
-    if (path.startsWith('/admin/bookings')) {
-      setExpandedSections((prev) => ({ ...prev, bookings: true }));
-    } else if (
-      path.startsWith('/admin/accommodations') ||
-      path.startsWith('/admin/room-types') ||
-      path.startsWith('/admin/amenities')
-    ) {
-      setExpandedSections((prev) => ({ ...prev, accommodations: true }));
-    } else if (
-      path.startsWith('/admin/rate-periods') ||
-      path.startsWith('/admin/room-rates') ||
-      path.startsWith('/admin/room-availability') ||
-      path.startsWith('/admin/pricing-history') ||
-      path.startsWith('/admin/pricing-proposals')
-    ) {
-      setExpandedSections((prev) => ({ ...prev, pricing: true }));
-    } else if (path.startsWith('/admin/reports')) {
-      setExpandedSections((prev) => ({ ...prev, reports: true }));
-    } else if (
-      path.startsWith('/admin/users') ||
-      path.startsWith('/admin/roles') ||
-      path.startsWith('/admin/managers')
-    ) {
-      setExpandedSections((prev) => ({ ...prev, users: true }));
-    } else if (path.startsWith('/admin/settings')) {
-      setExpandedSections((prev) => ({ ...prev, settings: true }));
-    }
-  }, [location.pathname]);
-
   const toggleSection = (section) => {
-    setExpandedSections((prev) => ({
+    setSectionOverrides((prev) => ({
       ...prev,
-      [section]: !prev[section],
+      [section]: {
+        route: currentRouteKey,
+        open: !expandedSections[section],
+      },
     }));
   };
 
@@ -196,65 +202,88 @@ export default function Sidebar() {
 
         {/* Bookings Parent */}
         {canViewBookings && (
-          <div>
-            <button
-              type="button"
-              className={`sidebar-item-parent ${location.pathname.startsWith('/admin/bookings') ? 'active-parent' : ''}`}
-              onClick={() => toggleSection('bookings')}
-              aria-expanded={expandedSections.bookings}
-            >
-              <div className="sidebar-item-left">
-                <CalendarCheck size={16} className="sidebar-icon" />
-                <span>Đặt phòng</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {pendingCount > 0 && <span className="sidebar-badge">{pendingCount}</span>}
-                {expandedSections.bookings ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </div>
-            </button>
+          <>
+            <div>
+              <button
+                type="button"
+                className={`sidebar-item-parent ${isBookingParentActive ? 'active-parent' : ''}`}
+                onClick={() => toggleSection('bookings')}
+                aria-expanded={expandedSections.bookings}
+              >
+                <div className="sidebar-item-left">
+                  <CalendarCheck size={16} className="sidebar-icon" />
+                  <span>Đặt phòng</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {pendingCount > 0 && <span className="sidebar-badge">{pendingCount}</span>}
+                  {expandedSections.bookings ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </div>
+              </button>
 
-            {expandedSections.bookings && (
-              <div className="sidebar-submenu">
-                <NavLink
-                  to="/admin/bookings"
-                  end
-                  className={({ isActive }) =>
-                    `sidebar-sublink ${isActive && !location.search ? 'active' : ''}`
-                  }
-                  onClick={closeMobile}
-                >
-                  Tất cả đặt phòng
-                </NavLink>
-                <NavLink
-                  to="/admin/bookings?status=PENDING"
-                  className={({ isActive }) =>
-                    `sidebar-sublink ${location.search.includes('status=PENDING') ? 'active' : ''}`
-                  }
-                  onClick={closeMobile}
-                >
-                  Đặt phòng chờ duyệt
-                </NavLink>
-                <NavLink
-                  to="/admin/bookings?stayStatus=checkin"
-                  className={({ isActive }) =>
-                    `sidebar-sublink ${location.search.includes('stayStatus=checkin') ? 'active' : ''}`
-                  }
-                  onClick={closeMobile}
-                >
-                  Nhận phòng
-                </NavLink>
-                <NavLink
-                  to="/admin/bookings?stayStatus=checkout"
-                  className={({ isActive }) =>
-                    `sidebar-sublink ${location.search.includes('stayStatus=checkout') ? 'active' : ''}`
-                  }
-                  onClick={closeMobile}
-                >
-                  Trả phòng
-                </NavLink>
-              </div>
-            )}
-          </div>
+              {expandedSections.bookings && (
+                <div className="sidebar-submenu">
+                  <NavLink
+                    to="/admin/bookings"
+                    end
+                    className={({ isActive }) =>
+                      `sidebar-sublink ${isActive && !location.search ? 'active' : ''}`
+                    }
+                    onClick={closeMobile}
+                  >
+                    Tất cả đặt phòng
+                  </NavLink>
+                  <NavLink
+                    to="/admin/bookings?status=PENDING"
+                    className={() =>
+                      `sidebar-sublink ${location.search.includes('status=PENDING') ? 'active' : ''}`
+                    }
+                    onClick={closeMobile}
+                  >
+                    Đặt phòng chờ duyệt
+                  </NavLink>
+                </div>
+              )}
+            </div>
+
+            {/* Trả phòng (Tách riêng Nhận phòng & Trả phòng) */}
+            <div>
+              <button
+                type="button"
+                className={`sidebar-item-parent ${isStayBookingPage ? 'active-parent' : ''}`}
+                onClick={() => toggleSection('stayOperations')}
+                aria-expanded={expandedSections.stayOperations}
+              >
+                <div className="sidebar-item-left">
+                  <DoorOpen size={16} className="sidebar-icon" />
+                  <span>Trả phòng</span>
+                </div>
+                {expandedSections.stayOperations ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+
+              {expandedSections.stayOperations && (
+                <div className="sidebar-submenu">
+                  <NavLink
+                    to="/admin/bookings?stayStatus=checkin"
+                    className={() =>
+                      `sidebar-sublink ${currentStayStatus === 'checkin' ? 'active' : ''}`
+                    }
+                    onClick={closeMobile}
+                  >
+                    Nhận phòng
+                  </NavLink>
+                  <NavLink
+                    to="/admin/bookings?stayStatus=checkout"
+                    className={() =>
+                      `sidebar-sublink ${currentStayStatus === 'checkout' ? 'active' : ''}`
+                    }
+                    onClick={closeMobile}
+                  >
+                    Trả phòng
+                  </NavLink>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {(canViewAccommodationsGroup || isAdmin || canViewPricing || canViewPromotions || canViewCustomers) && (

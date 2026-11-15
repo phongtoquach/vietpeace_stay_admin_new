@@ -11,6 +11,24 @@ import AuthContext from "../context/AuthContext";
 import { useAdmin } from "../context/AdminContext";
 import { adminChatClient } from "./ChatClient";
 
+function getConversationOwnerKey(conv) {
+  if (!conv) return null;
+  if (conv.customerUserId) return `cust:${String(conv.customerUserId).toLowerCase()}`;
+  if (conv.guestSessionId) return `guest:${String(conv.guestSessionId).toLowerCase()}`;
+  return null;
+}
+
+function shouldSupersedeOwnerConv(incoming, existing) {
+  if (!incoming || !existing) return false;
+  const incOpen = incoming.status === "OPEN" ? 0 : 1;
+  const extOpen = existing.status === "OPEN" ? 0 : 1;
+  if (incOpen !== extOpen) return incOpen < extOpen;
+  const incTime = new Date(incoming.lastMessageAt || incoming.updatedAt || incoming.createdAt || 0).getTime();
+  const extTime = new Date(existing.lastMessageAt || existing.updatedAt || existing.createdAt || 0).getTime();
+  if (incTime !== extTime) return incTime > extTime;
+  return Number(incoming.id) >= Number(existing.id);
+}
+
 const AdminChatContext = createContext(null);
 
 function playHandoffChime() {
@@ -72,6 +90,7 @@ export function AdminChatProvider({ children }) {
   const [reportsRefreshTick, setReportsRefreshTick] = useState(0);
 
   const activeConvIdRef = useRef(activeConvId);
+  const activeOwnerKeyRef = useRef(null);
   const activeThreadIdRef = useRef(activeThreadId);
   const userIdRef = useRef(userId);
   const userRoleRef = useRef(userRole);
@@ -87,6 +106,27 @@ export function AdminChatProvider({ children }) {
     userRoleRef.current = userRole;
     showToastRef.current = showToast;
   }, [activeConvId, activeThreadId, userId, userRole, showToast]);
+
+  useEffect(() => {
+    if (!activeConvId) {
+      activeOwnerKeyRef.current = null;
+      return;
+    }
+    const current = conversations.find((c) => Number(c.id) === Number(activeConvId));
+    if (current) {
+      const key = getConversationOwnerKey(current);
+      if (key) activeOwnerKeyRef.current = key;
+      return;
+    }
+    if (activeOwnerKeyRef.current) {
+      const replacement = conversations.find(
+        (c) => getConversationOwnerKey(c) === activeOwnerKeyRef.current,
+      );
+      if (replacement) {
+        setActiveConvId(Number(replacement.id));
+      }
+    }
+  }, [conversations, activeConvId]);
 
   const notifyHandoffAlert = useCallback((handoffKey, accommodationName, requesterName) => {
     if (!handoffKey || notifiedHandoffKeysRef.current.has(handoffKey)) return;
@@ -134,11 +174,25 @@ export function AdminChatProvider({ children }) {
   const upsertConversation = useCallback((conv) => {
     if (!conv?.id) return;
     const cid = Number(conv.id);
+    const ownerKey = getConversationOwnerKey(conv);
     setConversations((prev) => {
       const exists = prev.some((c) => Number(c.id) === cid);
-      const next = exists
-        ? prev.map((c) => (Number(c.id) === cid ? { ...c, ...conv } : c))
-        : [conv, ...prev];
+      let next;
+      if (exists) {
+        next = prev.map((c) => (Number(c.id) === cid ? { ...c, ...conv } : c));
+      } else if (ownerKey) {
+        const sameOwnerIdx = prev.findIndex((c) => getConversationOwnerKey(c) === ownerKey);
+        if (sameOwnerIdx !== -1) {
+          const existingOwnerConv = prev[sameOwnerIdx];
+          next = shouldSupersedeOwnerConv(conv, existingOwnerConv)
+            ? prev.map((c, i) => (i === sameOwnerIdx ? conv : c))
+            : prev;
+        } else {
+          next = [conv, ...prev];
+        }
+      } else {
+        next = [conv, ...prev];
+      }
       return [...next].sort(
         (a, b) => new Date(b.lastMessageAt || b.updatedAt || 0) - new Date(a.lastMessageAt || a.updatedAt || 0),
       );

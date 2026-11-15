@@ -489,7 +489,7 @@ export default function BookingListPage() {
         title={pageTitle}
         description={pageDescription}
         breadcrumb={[
-          { label: 'Đặt phòng' },
+          { label: isStayMode ? 'Trả phòng' : 'Đặt phòng' },
           ...(isStayMode
             ? [{ label: stayStatus === 'checkin' ? 'Nhận phòng' : 'Trả phòng' }]
             : [])

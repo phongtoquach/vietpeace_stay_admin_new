@@ -79,6 +79,7 @@ export function getDaySeparatorLabel(isoString) {
 export function shouldGroupChatMessages(prevMsg, currMsg, getSenderKey) {
   if (!prevMsg || !currMsg) return false;
   if (prevMsg.senderType === "SYSTEM" || currMsg.senderType === "SYSTEM") return false;
+  if (prevMsg.localStatus === "failed" || currMsg.localStatus === "failed") return false;
   if ((prevMsg.visibility || "PUBLIC") !== (currMsg.visibility || "PUBLIC")) return false;
   if (getSenderKey(prevMsg) !== getSenderKey(currMsg)) return false;
   if (!isSameCalendarDay(prevMsg.createdAt, currMsg.createdAt)) return false;
@@ -86,6 +87,59 @@ export function shouldGroupChatMessages(prevMsg, currMsg, getSenderKey) {
   const currMs = new Date(currMsg.createdAt).getTime();
   if (Number.isNaN(prevMs) || Number.isNaN(currMs)) return false;
   return Math.abs(currMs - prevMs) <= 3 * 60 * 1000;
+}
+
+/**
+ * Collapse consecutive non-system messages from the same sender (within 3 minutes
+ * on the same calendar day) into a single bubble entry so one turn renders in one box.
+ */
+export function groupChatMessages(messages, getSenderKey, canGroupExtra = null) {
+  const entries = [];
+  const list = Array.isArray(messages) ? messages : [];
+
+  for (let idx = 0; idx < list.length; idx += 1) {
+    const msg = list[idx];
+    const prevMsg = idx > 0 ? list[idx - 1] : null;
+    const showDaySep = !prevMsg || !isSameCalendarDay(prevMsg.createdAt, msg.createdAt);
+
+    if (msg?.senderType === "SYSTEM") {
+      entries.push({
+        type: "SYSTEM",
+        key: msg.id || msg.clientMessageId || `sys-${idx}`,
+        showDaySep,
+        msg,
+        index: idx,
+      });
+      continue;
+    }
+
+    const lastEntry = entries[entries.length - 1];
+    const canJoinPrevious =
+      !showDaySep &&
+      lastEntry &&
+      lastEntry.type === "GROUP" &&
+      shouldGroupChatMessages(lastEntry.lastMsg, msg, getSenderKey) &&
+      (!canGroupExtra || canGroupExtra(lastEntry.lastMsg, msg));
+
+    if (canJoinPrevious) {
+      lastEntry.items.push(msg);
+      lastEntry.lastMsg = msg;
+      lastEntry.lastIndex = idx;
+    } else {
+      entries.push({
+        type: "GROUP",
+        key: msg.id || msg.clientMessageId || `grp-${idx}`,
+        showDaySep,
+        firstMsg: msg,
+        lastMsg: msg,
+        firstIndex: idx,
+        lastIndex: idx,
+        items: [msg],
+      });
+    }
+  }
+
+  return entries;
 }
 
 /** Map raw conversation handlingMode/status enums to localized Vietnamese labels and chip tones. */

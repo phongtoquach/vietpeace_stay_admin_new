@@ -461,6 +461,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  min-inline-size: 0;
 }
 
 .page-title {
@@ -1375,4 +1376,40 @@ dialog.admin-native-dialog::backdrop {
     background: #FFFFFF;
     border-bottom-color: #F3F4F6;
     padding: 14px 18px;
+}
+
+.dash-manager-scope {
+    display: inline-flex;
+    align-items: safe center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    color: #78350F;
+    font-size: 13px;
+    line-height: 1.35;
+    max-inline-size: 100%;
+}
+
+.dash-manager-scope-icon {
+    flex-shrink: 0;
+    color: #D97706;
+}
+
+.dash-manager-scope-name,
+.dash-manager-scope-link {
+    font-weight: 700;
+    color: #92400E;
+    overflow-wrap: anywhere;
+}
+
+.dash-manager-scope-link {
+    text-decoration: none;
+}
+
+.dash-manager-scope-link:hover {
+    text-decoration: underline;
 }

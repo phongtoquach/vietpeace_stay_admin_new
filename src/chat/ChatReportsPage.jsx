@@ -25,8 +25,7 @@ import {
   formatFullDateTime,
   formatShortClock,
   getDaySeparatorLabel,
-  isSameCalendarDay,
-  shouldGroupChatMessages,
+  groupChatMessages,
 } from "./chatUtils";
 import "./chat.css";
 
@@ -58,7 +57,7 @@ function buildWarningEmailDraft(rating, reviewNoteOverride = "") {
   const noteText = String(reviewNoteOverride || rating?.reviewNote || "").trim();
   const score = Number(rating?.rating || 1);
 
-  const subject = `[VietPeace Stay CSKH] Cảnh cáo thái độ & chất lượng tư vấn (${score}/5 sao) — ${accommodationName}`;
+  const subject = `[VietPeace Stay CSKH] Cảnh cáo thái độ & chất lượng tư vấn (${score}/5★) — ${accommodationName}`;
   const bodyLines = [
     `Kính gửi Quản lý ${managerName}${recipientEmail ? ` (${recipientEmail})` : ""},`,
     ``,
@@ -66,7 +65,7 @@ function buildWarningEmailDraft(rating, reviewNoteOverride = "") {
     ``,
     `Thông tin phiên tư vấn bị đánh giá thấp:`,
     `- Khách hàng: ${customerName}`,
-    `- Mức đánh giá: ${score}/5 sao`,
+    `- Mức đánh giá: ${score}/5★`,
     `- Thời gian ghi nhận: ${formatFullDateTime(rating?.createdAt)}`,
     `- Nhận xét của khách hàng: ${
       rating?.comment ? `"${rating.comment}"` : "(Khách hàng đánh giá thấp nhưng không để lại nhận xét chi tiết)"
@@ -473,14 +472,10 @@ export default function ChatReportsPage() {
   return (
     <div className="vps-admin-chat-page">
       <div className="vps-admin-chat-topbar">
-        <div>
-          <h1 className="page-title" style={{ marginBottom: "4px" }}>
+        <div className="vps-admin-chat-heading">
+          <h1 className="page-title">
             Báo cáo Chat &amp; Chất lượng CSKH
           </h1>
-          <p className="page-subtitle">
-            Dành riêng cho Super Admin: theo dõi yêu cầu khách bị Quản lý bỏ lỡ quá 5 phút, đánh giá CSKH
-            (1–3 sao) và gửi Gmail cảnh cáo.
-          </p>
         </div>
         <ChatNavigation />
       </div>
@@ -496,7 +491,7 @@ export default function ChatReportsPage() {
           <strong className="vps-kpi-val tabular-nums">{reportsSummary.totalMissedCount}</strong>
         </div>
         <div className="vps-kpi-card vps-kpi-card--warn">
-          <div className="vps-kpi-label">Đánh giá CSKH (1–3★) chờ duyệt</div>
+          <div className="vps-kpi-label">Đánh giá CSKH (1★-3★) chờ duyệt</div>
           <strong className="vps-kpi-val tabular-nums">{reportsSummary.pendingLowRatingsCount}</strong>
         </div>
         <div className="vps-kpi-card">
@@ -525,7 +520,7 @@ export default function ChatReportsPage() {
           onClick={() => setTab("RATINGS")}
         >
           <Star size={15} />
-          <span>Đánh giá CSKH (1–3 sao)</span>
+          <span>Đánh giá CSKH (1★-3★)</span>
           {reportsSummary.pendingLowRatingsCount > 0 && (
             <span className="vps-tab-badge vps-tab-badge--warn">{reportsSummary.pendingLowRatingsCount}</span>
           )}
@@ -616,16 +611,10 @@ export default function ChatReportsPage() {
       ) : tab === "RATINGS" ? (
         <div className="vps-report-card">
           <div className="vps-report-toolbar">
-            <div>
-              <h2>Báo cáo đánh giá CSKH thấp (1–3 sao)</h2>
-              <p className="vps-report-helper">
-                Bấm <strong>Xem tin nhắn</strong> để rà soát đoạn hội thoại giữa Quản lý và Khách hàng trước khi quyết định{" "}
-                <strong>Xác nhận vi phạm</strong> hoặc <strong>Bỏ qua</strong>.
-              </p>
-            </div>
+            <h2>Báo cáo đánh giá CSKH thấp (1★-3★)</h2>
             <div className="vps-filter-pills">
               {[
-                { key: "ACTIVE", label: "Cần xử lý (1–3★)" },
+                { key: "ACTIVE", label: "Cần xử lý" },
                 { key: "PENDING_REVIEW", label: "Chờ duyệt" },
                 { key: "CONFIRMED_VIOLATION", label: "Vi phạm CSKH" },
                 { key: "DISMISSED", label: "Đã bỏ qua" },
@@ -643,13 +632,13 @@ export default function ChatReportsPage() {
           </div>
 
           {displayedRatings.length === 0 ? (
-            <p className="vps-empty-note-lg">Không có đánh giá CSKH (1–3 sao) nào trong mục này.</p>
+            <p className="vps-empty-note-lg">Không có đánh giá CSKH (1★-3★) nào trong mục này.</p>
           ) : (
             <div className="vps-table-scroll">
               <table className="vps-report-table">
                 <thead>
                   <tr>
-                    <th>Đánh giá (1–3★)</th>
+                    <th>Đánh giá (1★-3★)</th>
                     <th>Khách hàng &amp; Nhận xét</th>
                     <th>Cơ sở &amp; Quản lý</th>
                     <th>Kiểm duyệt</th>
@@ -857,7 +846,7 @@ export default function ChatReportsPage() {
                     color={idx < transcriptTarget.rating ? "#F5B82E" : "#CBD5E1"}
                   />
                 ))}
-                <strong>{transcriptTarget.rating}/5 sao</strong>
+                <strong>{transcriptTarget.rating}/5★</strong>
                 <span className={`vps-status-pill ${(REVIEW_STATUS_META[transcriptTarget.adminReviewStatus] || {}).tone || "muted"}`}>
                   {(REVIEW_STATUS_META[transcriptTarget.adminReviewStatus] || {}).label ||
                     transcriptTarget.adminReviewStatus}
@@ -888,72 +877,97 @@ export default function ChatReportsPage() {
               ) : transcriptMessages.length === 0 ? (
                 <div className="vps-transcript-state">Chưa có tin nhắn nào trong hội thoại này.</div>
               ) : (
-                transcriptMessages.map((msg, idx) => {
-                  const prevMsg = idx > 0 ? transcriptMessages[idx - 1] : null;
-                  const showDaySep = !prevMsg || !isSameCalendarDay(prevMsg.createdAt, msg.createdAt);
-                  const isStaffNote = msg.visibility === "STAFF";
-                  const isManagerMsg = msg.senderType === "MANAGER";
-                  const isCustomerMsg = msg.senderType === "CUSTOMER" || msg.senderType === "GUEST";
-                  const isSystem = msg.senderType === "SYSTEM";
-                  const isAiMsg = !isStaffNote && !isManagerMsg && !isCustomerMsg && !isSystem;
-                  const isGrouped =
-                    !showDaySep && shouldGroupChatMessages(prevMsg, msg, getTranscriptSenderKey);
+                groupChatMessages(
+                  transcriptMessages,
+                  getTranscriptSenderKey,
+                  (prevMsg, currMsg) => {
+                    const isPrevInHandoff = prevMsg.handoffId
+                      ? Number(prevMsg.handoffId) === Number(transcriptTarget.handoffId)
+                      : Boolean(handoffStartMs && handoffEndMs) &&
+                        new Date(prevMsg.createdAt).getTime() >= handoffStartMs &&
+                        new Date(prevMsg.createdAt).getTime() <= handoffEndMs;
+                    const isCurrInHandoff = currMsg.handoffId
+                      ? Number(currMsg.handoffId) === Number(transcriptTarget.handoffId)
+                      : Boolean(handoffStartMs && handoffEndMs) &&
+                        new Date(currMsg.createdAt).getTime() >= handoffStartMs &&
+                        new Date(currMsg.createdAt).getTime() <= handoffEndMs;
+                    return isPrevInHandoff === isCurrInHandoff;
+                  },
+                ).map((entry) => {
+                  if (entry.type === "SYSTEM") {
+                    return (
+                      <Fragment key={entry.key}>
+                        {entry.showDaySep && (
+                          <div className="vps-adm-day-sep" role="separator">
+                            <span>{getDaySeparatorLabel(entry.msg.createdAt)}</span>
+                          </div>
+                        )}
+                        <div className="vps-adm-system">
+                          <span>{entry.msg.content}</span>
+                        </div>
+                      </Fragment>
+                    );
+                  }
 
-                  const msgTs = msg.createdAt ? new Date(msg.createdAt).getTime() : 0;
-                  const isInRatedHandoff = msg.handoffId
-                    ? Number(msg.handoffId) === Number(transcriptTarget.handoffId)
+                  const firstMsg = entry.firstMsg;
+                  const isStaffNote = firstMsg.visibility === "STAFF";
+                  const isManagerMsg = firstMsg.senderType === "MANAGER";
+                  const isCustomerMsg = firstMsg.senderType === "CUSTOMER" || firstMsg.senderType === "GUEST";
+                  const isAiMsg = !isStaffNote && !isManagerMsg && !isCustomerMsg;
+
+                  const msgTs = firstMsg.createdAt ? new Date(firstMsg.createdAt).getTime() : 0;
+                  const isInRatedHandoff = firstMsg.handoffId
+                    ? Number(firstMsg.handoffId) === Number(transcriptTarget.handoffId)
                     : Boolean(handoffStartMs && handoffEndMs) && msgTs >= handoffStartMs && msgTs <= handoffEndMs;
 
                   return (
-                    <Fragment key={msg.id || msg.clientMessageId || idx}>
-                      {showDaySep && (
+                    <Fragment key={entry.key}>
+                      {entry.showDaySep && (
                         <div className="vps-adm-day-sep" role="separator">
-                          <span>{getDaySeparatorLabel(msg.createdAt)}</span>
+                          <span>{getDaySeparatorLabel(firstMsg.createdAt)}</span>
                         </div>
                       )}
 
-                      {isSystem ? (
-                        <div className="vps-adm-system">
-                          <span>{msg.content}</span>
-                        </div>
-                      ) : (
-                        <div
-                          className={`vps-adm-msg ${isManagerMsg ? "out" : isCustomerMsg ? "in" : "bot"} ${
-                            isStaffNote ? "staff-note" : ""
-                          } ${isGrouped ? "is-grouped" : ""} ${
-                            isInRatedHandoff ? "vps-transcript-in-handoff" : ""
-                          }`}
-                        >
-                          {!isGrouped && (
-                            <div className="vps-adm-msg-meta">
-                              {isStaffNote ? (
-                                <span className="vps-adm-note-badge">
-                                  <Lock size={10} aria-hidden="true" />
-                                  Ghi chú nội bộ
-                                </span>
-                              ) : isAiMsg ? (
-                                <span className="vps-adm-ai-badge">
-                                  <Sparkles size={10} aria-hidden="true" />
-                                  Trợ lý AI
-                                </span>
-                              ) : (
-                                <strong>
-                                  {isManagerMsg
-                                    ? `Quản lý (${msg.senderName || (String(msg.senderUserId || "").toLowerCase() === String(transcriptTarget.managerUserId || "").toLowerCase() ? transcriptTarget.managerName : null) || "CSKH"})`
-                                    : transcriptTarget.customerName || "Khách hàng"}
-                                </strong>
-                              )}
-                              {isInRatedHandoff && (
-                                <span className="vps-handoff-hit-tag">Phiên được đánh giá</span>
-                              )}
-                              <span>{formatShortClock(msg.createdAt)}</span>
-                            </div>
+                      <div
+                        className={`vps-adm-msg ${isManagerMsg ? "out" : isCustomerMsg ? "in" : "bot"} ${
+                          isStaffNote ? "staff-note" : ""
+                        } ${isInRatedHandoff ? "vps-transcript-in-handoff" : ""}`}
+                      >
+                        <div className="vps-adm-msg-meta">
+                          {isStaffNote ? (
+                            <span className="vps-adm-note-badge">
+                              <Lock size={10} aria-hidden="true" />
+                              Ghi chú nội bộ
+                            </span>
+                          ) : isAiMsg ? (
+                            <span className="vps-adm-ai-badge">
+                              <Sparkles size={10} aria-hidden="true" />
+                              Trợ lý AI
+                            </span>
+                          ) : (
+                            <strong>
+                              {isManagerMsg
+                                ? `Quản lý (${firstMsg.senderName || (String(firstMsg.senderUserId || "").toLowerCase() === String(transcriptTarget.managerUserId || "").toLowerCase() ? transcriptTarget.managerName : null) || "CSKH"})`
+                                : transcriptTarget.customerName || "Khách hàng"}
+                            </strong>
                           )}
-                          <div className="vps-adm-msg-bubble" title={formatFullDateTime(msg.createdAt)}>
-                            <div>{msg.content}</div>
-                          </div>
+                          {isInRatedHandoff && (
+                            <span className="vps-handoff-hit-tag">Phiên được đánh giá</span>
+                          )}
+                          <span>{formatShortClock(firstMsg.createdAt)}</span>
                         </div>
-                      )}
+                        <div className="vps-adm-msg-bubble">
+                          {entry.items.map((item, itemIdx) => (
+                            <div
+                              key={item.id || item.clientMessageId || itemIdx}
+                              className="vps-adm-msg-part"
+                              title={formatFullDateTime(item.createdAt)}
+                            >
+                              <div className="vps-adm-msg-text">{item.content}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </Fragment>
                   );
                 })

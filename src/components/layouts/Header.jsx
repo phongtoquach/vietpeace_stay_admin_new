@@ -449,7 +449,7 @@ export default function Header({ breadcrumbItems = [] }) {
                           }}
                         >
                           <div style={{ fontWeight: 700, color: '#9A3412' }}>
-                            {reportsSummary.pendingLowRatingsCount} đánh giá 1–3★ chờ kiểm duyệt
+                            {reportsSummary.pendingLowRatingsCount} đánh giá 1★-3★ chờ kiểm duyệt
                           </div>
                           <div style={{ color: '#6B7280', marginTop: '2px' }}>
                             Xem báo cáo chất lượng Quản lý & gửi nhắc nhở.

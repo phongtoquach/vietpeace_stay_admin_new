@@ -21,7 +21,8 @@ import {
   Eye,
   ArrowRight,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  Building2
 } from 'lucide-react';
 
 const PAYMENT_STATUS_LABEL = {
@@ -60,6 +61,10 @@ const STATUS_META = {
 export default function DashboardPage() {
   const { currentLoggedInUser, hasPermission } = useAuth();
   const isAdmin = currentLoggedInUser?.role === 'ADMIN';
+  const isManager = currentLoggedInUser?.role === 'ACCOMMODATION_MANAGER';
+  const managedAccommodationId = currentLoggedInUser?.accommodationId ?? null;
+  const managedAccommodationName = currentLoggedInUser?.accommodationName?.trim() || null;
+  const canViewManagedFacility = hasPermission('accommodations.read') || hasPermission('accommodations.update');
   const canViewReports = isAdmin || hasPermission('reports.view');
 
   const [summary, setSummary] = useState(null);
@@ -149,7 +154,27 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-modern">
-      <PageHeader title="Tổng quan hoạt động kinh doanh" />
+      <PageHeader
+        title="Tổng quan hoạt động kinh doanh"
+        description={
+          isManager && managedAccommodationName ? (
+            <span className="dash-manager-scope">
+              <Building2 size={14} className="dash-manager-scope-icon" aria-hidden="true" />
+              <span>Cơ sở quản lý:</span>
+              {managedAccommodationId && canViewManagedFacility ? (
+                <Link
+                  to={`/admin/accommodations/${managedAccommodationId}`}
+                  className="dash-manager-scope-link"
+                >
+                  {managedAccommodationName}
+                </Link>
+              ) : (
+                <strong className="dash-manager-scope-name">{managedAccommodationName}</strong>
+              )}
+            </span>
+          ) : undefined
+        }
+      />
 
       {error && (
         <div

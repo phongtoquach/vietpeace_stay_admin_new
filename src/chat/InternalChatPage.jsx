@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Send,
   Search,
@@ -9,6 +9,8 @@ import {
   Building2,
   ShieldCheck,
   MessageSquarePlus,
+  MessageSquare,
+  Users,
   Loader2,
   ArrowDown,
 } from "lucide-react";
@@ -23,9 +25,8 @@ import {
   getAdminReceiptMeta,
   getDaySeparatorLabel,
   getInitials,
+  groupChatMessages,
   isImeComposing,
-  isSameCalendarDay,
-  shouldGroupChatMessages,
 } from "./chatUtils";
 import {
   fetchInternalDirectory,
@@ -54,13 +55,20 @@ export default function InternalChatPage() {
   } = useAdminChat();
 
   const [contacts, setContacts] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [threadSearch, setThreadSearch] = useState("");
+  const [directorySearch, setDirectorySearch] = useState("");
+  const [leftTab, setLeftTab] = useState("threads"); // 'threads' | 'directory'
   const [draftText, setDraftText] = useState("");
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [customNameInput, setCustomNameInput] = useState("");
   const [showScrollBottom, setShowScrollBottom] = useState(false);
 
+  const tabIdPrefix = useId();
+  const threadsTabId = `${tabIdPrefix}-threads-tab`;
+  const directoryTabId = `${tabIdPrefix}-directory-tab`;
+  const threadsTabRef = useRef(null);
+  const directoryTabRef = useRef(null);
   const streamEndRef = useRef(null);
   const isNearBottomRef = useRef(true);
 
@@ -78,11 +86,25 @@ export default function InternalChatPage() {
     [internalThreads, activeThreadId],
   );
 
+  const recentThreads = useMemo(
+    () =>
+      internalThreads.filter((t) => {
+        const msgs = internalMessagesById[Number(t.id)];
+        return (
+          Number(t.lastSequence || 0) > 0 ||
+          Boolean(t.lastMessageAt) ||
+          Boolean(String(t.lastMessagePreview || "").trim()) ||
+          (Array.isArray(msgs) && msgs.length > 0)
+        );
+      }),
+    [internalThreads, internalMessagesById],
+  );
+
   useEffect(() => {
-    if (!activeThreadId && internalThreads.length > 0) {
-      setActiveThreadId(internalThreads[0].id);
+    if (!activeThreadId && recentThreads.length > 0) {
+      setActiveThreadId(recentThreads[0].id);
     }
-  }, [activeThreadId, internalThreads, setActiveThreadId]);
+  }, [activeThreadId, recentThreads, setActiveThreadId]);
 
   useEffect(() => {
     if (!activeThreadId) return;
@@ -208,7 +230,15 @@ export default function InternalChatPage() {
         content: clean,
         clientMessageId,
       });
-      if (res?.message) appendInternalMessage(selectedThread.id, res.message);
+      if (res?.message) {
+        appendInternalMessage(selectedThread.id, res.message);
+        upsertInternalThread({
+          id: selectedThread.id,
+          lastSequence: res.message.sequence,
+          lastMessageAt: res.message.createdAt,
+          lastMessagePreview: res.message.content,
+        });
+      }
     } catch (err) {
       setInternalMessagesById((prev) => ({
         ...prev,
@@ -228,8 +258,36 @@ export default function InternalChatPage() {
     }
   }
 
+  function handleLeftTabKeyDown(e) {
+    let nextTab = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      nextTab = leftTab === "threads" ? "directory" : "threads";
+    } else if (e.key === "Home") {
+      nextTab = "threads";
+    } else if (e.key === "End") {
+      nextTab = "directory";
+    }
+    if (!nextTab) return;
+    e.preventDefault();
+    setLeftTab(nextTab);
+    const targetRef = nextTab === "threads" ? threadsTabRef : directoryTabRef;
+    targetRef.current?.focus();
+  }
+
+  const filteredRecentThreads = useMemo(() => {
+    const q = threadSearch.trim().toLowerCase();
+    if (!q) return recentThreads;
+    return recentThreads.filter(
+      (t) =>
+        String(t.peerName || "").toLowerCase().includes(q) ||
+        String(t.accommodationName || "").toLowerCase().includes(q) ||
+        String(t.peerEmail || "").toLowerCase().includes(q) ||
+        String(t.lastMessagePreview || "").toLowerCase().includes(q),
+    );
+  }, [recentThreads, threadSearch]);
+
   const filteredContacts = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = directorySearch.trim().toLowerCase();
     return contacts.filter((c) => {
       if (!q) return true;
       return (
@@ -238,8 +296,9 @@ export default function InternalChatPage() {
         String(c.email || "").toLowerCase().includes(q)
       );
     });
-  }, [contacts, searchTerm]);
+  }, [contacts, directorySearch]);
 
+  const activePeerUserId = String(selectedThread?.peerUserId || "").toLowerCase();
   const myUserIdLower = String(chatMe?.userId || "").toLowerCase();
   const lastOutgoingIdx = (() => {
     for (let i = selectedMessages.length - 1; i >= 0; i--) {
@@ -251,7 +310,7 @@ export default function InternalChatPage() {
   })();
 
   return (
-    <div className="vps-admin-chat-page vps-admin-chat-page--split">
+    <div className="vps-admin-chat-page vps-admin-chat-page--split vps-admin-chat-page--internal">
       <div className="vps-admin-chat-topbar">
         <div className="vps-admin-chat-heading">
           <h1 className="page-title">Chat nội bộ VietPeace Stay</h1>
@@ -259,108 +318,194 @@ export default function InternalChatPage() {
         <ChatNavigation />
       </div>
 
-      <div className="vps-chat-workspace">
-        {/* Left: Active Threads + Contacts */}
-        <aside className="vps-chat-sidebar" aria-label="Danh bạ và luồng chat nội bộ">
-          <div className="vps-sidebar-filters">
-            <div className="vps-search-box">
-              <Search size={15} aria-hidden="true" />
-              <input
-                type="search"
-                placeholder="Tìm Admin, Quản lý hoặc cơ sở…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Tìm liên hệ nội bộ"
-              />
+      <div className="vps-chat-workspace vps-chat-workspace--internal">
+        {/* Left Sidebar: Combined Conversations & Directory Tabs */}
+        <aside className="vps-chat-sidebar vps-internal-sidebar" aria-label="Cuộc trò chuyện và danh bạ nhân sự">
+          <div
+            className="vps-internal-tablist"
+            role="tablist"
+            aria-label="Chọn giữa cuộc trò chuyện và danh bạ"
+          >
+            <button
+              ref={threadsTabRef}
+              id={threadsTabId}
+              type="button"
+              role="tab"
+              aria-selected={leftTab === "threads"}
+              tabIndex={leftTab === "threads" ? 0 : -1}
+              className="vps-internal-tab"
+              onClick={() => setLeftTab("threads")}
+              onKeyDown={handleLeftTabKeyDown}
+            >
+              <MessageSquare size={15} aria-hidden="true" />
+              <span className="vps-ellipsis">Cuộc trò chuyện</span>
+              <span className="vps-pane-count">{recentThreads.length}</span>
+            </button>
+            <button
+              ref={directoryTabRef}
+              id={directoryTabId}
+              type="button"
+              role="tab"
+              aria-selected={leftTab === "directory"}
+              tabIndex={leftTab === "directory" ? 0 : -1}
+              className="vps-internal-tab"
+              onClick={() => setLeftTab("directory")}
+              onKeyDown={handleLeftTabKeyDown}
+            >
+              <Users size={15} aria-hidden="true" />
+              <span className="vps-ellipsis">Danh bạ</span>
+              <span className="vps-pane-count">{contacts.length}</span>
+            </button>
+          </div>
+
+          <div
+            className="vps-internal-tabpanel"
+            role="tabpanel"
+            aria-labelledby={threadsTabId}
+            hidden={leftTab !== "threads"}
+          >
+            <div className="vps-sidebar-filters">
+              <div className="vps-search-box">
+                <Search size={15} aria-hidden="true" />
+                <input
+                  type="search"
+                  placeholder="Tìm người đã nhắn tin…"
+                  value={threadSearch}
+                  onChange={(e) => setThreadSearch(e.target.value)}
+                  aria-label="Tìm trong cuộc trò chuyện gần đây"
+                />
+              </div>
+            </div>
+
+            <div className="vps-thread-list">
+              {filteredRecentThreads.length === 0 ? (
+                <div className="vps-empty-note-sm">
+                  {recentThreads.length === 0
+                    ? "Chưa có cuộc trò chuyện nào. Chuyển sang mục Danh bạ bên cạnh để bắt đầu."
+                    : "Không tìm thấy cuộc trò chuyện phù hợp."}
+                </div>
+              ) : (
+                filteredRecentThreads.map((t) => {
+                  const isSelected = Number(t.id) === Number(activeThreadId);
+                  const hasUnread = Number(t.unreadCount || 0) > 0 && !isSelected;
+                  const avatarTone = t.isArchived
+                    ? "resolved"
+                    : t.peerRole === "ADMIN"
+                      ? "admin"
+                      : "human";
+                  const timeLabel = formatSidebarTime(t.lastMessageAt || t.updatedAt);
+                  const orgLabel =
+                    t.threadType === "ADMIN_MANAGER" && t.peerRole === "ADMIN"
+                      ? "Ban quản trị VietPeace Stay"
+                      : t.accommodationName || "Quản lý cơ sở";
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`vps-thread-item ${isSelected ? "active" : ""} ${hasUnread ? "is-unread" : ""}`}
+                      onClick={() => handleSelectThread(t.id)}
+                    >
+                      <div className={`vps-thread-avatar vps-thread-avatar--${avatarTone}`} aria-hidden="true">
+                        {getInitials(t.peerName, "NV")}
+                      </div>
+                      <div className="vps-thread-content">
+                        <div className="vps-thread-item-head">
+                          <strong className="vps-ellipsis">{t.peerName}</strong>
+                          {timeLabel && <span className="vps-thread-time">{timeLabel}</span>}
+                        </div>
+                        <div className="vps-thread-item-sub">
+                          <span className="vps-thread-sub-left" title={orgLabel}>
+                            {t.peerRole === "ADMIN" ? (
+                              <ShieldCheck size={12} aria-hidden="true" />
+                            ) : (
+                              <Building2 size={12} aria-hidden="true" />
+                            )}
+                            <span className="vps-ellipsis">{orgLabel}</span>
+                            {t.isArchived && <Archive size={11} title="Đã lưu trữ Read-Only" />}
+                          </span>
+                          {hasUnread && (
+                            <span className="vps-unread-dot" aria-label={`${t.unreadCount} tin chưa đọc`}>
+                              {t.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                        <div className="vps-thread-item-preview">{t.lastMessagePreview || "Bắt đầu trao đổi…"}</div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
 
-          <div className="vps-thread-list">
-            <div className="vps-list-section-label">Cuộc trò chuyện gần đây</div>
-            {internalThreads.length === 0 ? (
-              <div className="vps-empty-note-sm">Chưa có luồng chat nội bộ nào. Chọn liên hệ bên dưới để bắt đầu.</div>
-            ) : (
-              internalThreads.map((t) => {
-                const isSelected = Number(t.id) === Number(activeThreadId);
-                const hasUnread = Number(t.unreadCount || 0) > 0 && !isSelected;
-                const avatarTone = t.isArchived
-                  ? "resolved"
-                  : t.peerRole === "ADMIN"
-                    ? "admin"
-                    : "human";
-                const timeLabel = formatSidebarTime(t.lastMessageAt || t.updatedAt);
-                const orgLabel =
-                  t.threadType === "ADMIN_MANAGER" && t.peerRole === "ADMIN"
-                    ? "Ban quản trị VietPeace Stay"
-                    : t.accommodationName || "Quản lý cơ sở";
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={`vps-thread-item ${isSelected ? "active" : ""} ${hasUnread ? "is-unread" : ""}`}
-                    onClick={() => handleSelectThread(t.id)}
-                  >
-                    <div className={`vps-thread-avatar vps-thread-avatar--${avatarTone}`} aria-hidden="true">
-                      {getInitials(t.peerName, "NV")}
-                    </div>
-                    <div className="vps-thread-content">
-                      <div className="vps-thread-item-head">
-                        <strong className="vps-ellipsis">{t.peerName}</strong>
-                        {timeLabel && <span className="vps-thread-time">{timeLabel}</span>}
+          <div
+            className="vps-internal-tabpanel"
+            role="tabpanel"
+            aria-labelledby={directoryTabId}
+            hidden={leftTab !== "directory"}
+          >
+            <div className="vps-sidebar-filters">
+              <div className="vps-search-box">
+                <Search size={15} aria-hidden="true" />
+                <input
+                  type="search"
+                  placeholder="Tìm Admin, Quản lý hoặc cơ sở…"
+                  value={directorySearch}
+                  onChange={(e) => setDirectorySearch(e.target.value)}
+                  aria-label="Tìm liên hệ trong danh bạ"
+                />
+              </div>
+            </div>
+
+            <div className="vps-thread-list vps-directory-list">
+              {filteredContacts.length === 0 ? (
+                <div className="vps-empty-note-sm">Không tìm thấy nhân sự phù hợp.</div>
+              ) : (
+                filteredContacts.map((c) => {
+                  const isActivePeer =
+                    Boolean(activePeerUserId) && String(c.userId || "").toLowerCase() === activePeerUserId;
+                  return (
+                    <button
+                      key={c.userId}
+                      type="button"
+                      className={`vps-contact-item ${isActivePeer ? "active" : ""}`}
+                      onClick={() => handleOpenContact(c)}
+                      title={`Nhắn tin với ${c.fullName}`}
+                    >
+                      <div
+                        className={`vps-thread-avatar vps-thread-avatar--${c.role === "ADMIN" ? "admin" : "ai"}`}
+                        aria-hidden="true"
+                      >
+                        {getInitials(c.fullName, "NV")}
                       </div>
-                      <div className="vps-thread-item-sub">
-                        <span className="vps-thread-sub-left" title={orgLabel}>
-                          {t.peerRole === "ADMIN" ? (
+                      <div className="vps-contact-meta">
+                        <strong className="vps-ellipsis">{c.fullName}</strong>
+                        <small className="vps-thread-sub-left" title={c.accommodationName}>
+                          {c.role === "ADMIN" ? (
                             <ShieldCheck size={12} aria-hidden="true" />
                           ) : (
                             <Building2 size={12} aria-hidden="true" />
                           )}
-                          <span className="vps-ellipsis">{orgLabel}</span>
-                          {t.isArchived && <Archive size={11} title="Đã lưu trữ Read-Only" />}
-                        </span>
-                        {hasUnread && (
-                          <span className="vps-unread-dot" aria-label={`${t.unreadCount} tin chưa đọc`}>
-                            {t.unreadCount}
-                          </span>
-                        )}
+                          <span className="vps-ellipsis">{c.accommodationName}</span>
+                        </small>
                       </div>
-                      <div className="vps-thread-item-preview">{t.lastMessagePreview || "Bắt đầu trao đổi…"}</div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-
-            <div className="vps-list-section-label" style={{ marginTop: "8px" }}>
-              Danh bạ nhân sự đang hoạt động
+                      <span className="vps-contact-action-icon" aria-hidden="true">
+                        <MessageSquarePlus size={15} />
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
-            {filteredContacts.map((c) => (
-              <button
-                key={c.userId}
-                type="button"
-                className="vps-contact-item"
-                onClick={() => handleOpenContact(c)}
-              >
-                <div
-                  className={`vps-thread-avatar vps-thread-avatar--${c.role === "ADMIN" ? "admin" : "ai"}`}
-                  aria-hidden="true"
-                >
-                  {getInitials(c.fullName, "NV")}
-                </div>
-                <div className="vps-contact-meta">
-                  <strong className="vps-ellipsis">{c.fullName}</strong>
-                  <small className="vps-ellipsis">{c.accommodationName}</small>
-                </div>
-                <MessageSquarePlus size={15} aria-hidden="true" />
-              </button>
-            ))}
           </div>
         </aside>
 
-        {/* Right: Active Thread Conversation */}
+        {/* Right Pane: Active Thread Conversation */}
         <section className="vps-chat-main">
           {!selectedThread ? (
-            <div className="vps-empty-pane">Chọn một đồng nghiệp bên trái để nhắn tin nội bộ.</div>
+            <div className="vps-empty-pane">
+              Chọn nhân sự trong mục Danh bạ bên cạnh để bắt đầu nhắn tin nội bộ.
+            </div>
           ) : (
             <>
               <header className="vps-main-header">
@@ -443,32 +588,52 @@ export default function InternalChatPage() {
                       <Loader2 size={20} className="vps-adm-spin" /> Đang tải tin nhắn nội bộ…
                     </div>
                   ) : (
-                    selectedMessages.map((msg, idx) => {
-                      const prevMsg = idx > 0 ? selectedMessages[idx - 1] : null;
-                      const showDaySep = !prevMsg || !isSameCalendarDay(prevMsg.createdAt, msg.createdAt);
-                      const isMine = getInternalSenderKey(msg) === myUserIdLower;
-                      const isGrouped = !showDaySep && shouldGroupChatMessages(prevMsg, msg, getInternalSenderKey);
-                      const showReceipt = isMine && idx === lastOutgoingIdx;
+                    groupChatMessages(selectedMessages, getInternalSenderKey).map((entry) => {
+                      if (entry.type === "SYSTEM") {
+                        return (
+                          <Fragment key={entry.key}>
+                            {entry.showDaySep && (
+                              <div className="vps-adm-day-sep" role="separator">
+                                <span>{getDaySeparatorLabel(entry.msg.createdAt)}</span>
+                              </div>
+                            )}
+                            <div className="vps-adm-system">
+                              <span>{entry.msg.content}</span>
+                            </div>
+                          </Fragment>
+                        );
+                      }
+
+                      const firstMsg = entry.firstMsg;
+                      const lastMsg = entry.lastMsg;
+                      const isMine = getInternalSenderKey(firstMsg) === myUserIdLower;
+                      const showReceipt = isMine && entry.lastIndex === lastOutgoingIdx;
                       const receipt = showReceipt
-                        ? getAdminReceiptMeta(msg, selectedThread.peerDelivery, selectedThread.peerName)
+                        ? getAdminReceiptMeta(lastMsg, selectedThread.peerDelivery, selectedThread.peerName)
                         : null;
 
                       return (
-                        <Fragment key={msg.id || msg.clientMessageId || idx}>
-                          {showDaySep && (
+                        <Fragment key={entry.key}>
+                          {entry.showDaySep && (
                             <div className="vps-adm-day-sep" role="separator">
-                              <span>{getDaySeparatorLabel(msg.createdAt)}</span>
+                              <span>{getDaySeparatorLabel(firstMsg.createdAt)}</span>
                             </div>
                           )}
-                          <div className={`vps-adm-msg ${isMine ? "out" : "in"} ${isGrouped ? "is-grouped" : ""}`}>
-                            {!isGrouped && (
-                              <div className="vps-adm-msg-meta">
-                                <strong>{isMine ? "Bạn" : msg.senderName || selectedThread.peerName}</strong>
-                                <span>{formatShortClock(msg.createdAt)}</span>
-                              </div>
-                            )}
-                            <div className="vps-adm-msg-bubble" title={formatFullDateTime(msg.createdAt)}>
-                              {msg.content}
+                          <div className={`vps-adm-msg ${isMine ? "out" : "in"}`}>
+                            <div className="vps-adm-msg-meta">
+                              <strong>{isMine ? "Bạn" : firstMsg.senderName || selectedThread.peerName}</strong>
+                              <span>{formatShortClock(firstMsg.createdAt)}</span>
+                            </div>
+                            <div className="vps-adm-msg-bubble">
+                              {entry.items.map((item, itemIdx) => (
+                                <div
+                                  key={item.id || item.clientMessageId || itemIdx}
+                                  className="vps-adm-msg-part"
+                                  title={formatFullDateTime(item.createdAt)}
+                                >
+                                  <div className="vps-adm-msg-text">{item.content}</div>
+                                </div>
+                              ))}
                             </div>
                             {receipt && (
                               <div
