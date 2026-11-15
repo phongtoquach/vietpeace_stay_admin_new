@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
-import { formatVND, formatDateVN, formatDateTimeVN } from '../../data/mockData.js';
+import {
+  formatVND,
+  formatDateVN,
+  formatDateTimeVN,
+  toDateOnlyIso,
+  getLocalTodayIso,
+} from '../../data/mockData.js';
 import { bookingsApi } from '../../api/bookings.js';
 import {
   ArrowLeft,
@@ -19,7 +26,11 @@ import {
 export default function BookingDetailPage() {
   const { id } = useParams();
   const location = useLocation();
+  const { currentLoggedInUser, hasPermission } = useAuth();
   const { approveBooking, checkInBooking, checkOutBooking, showToast } = useAdmin();
+  const isAdmin = currentLoggedInUser?.role === 'ADMIN';
+  const canWriteBookings =
+    isAdmin || hasPermission('bookings.write') || hasPermission('bookings.update_status');
   const fromReport = typeof location.state?.from === 'string'
     && location.state.from.startsWith('/admin/')
     ? location.state.from
@@ -169,21 +180,54 @@ export default function BookingDetailPage() {
       ? 'checked-out'
       : booking.status;
 
+  const checkInIso = toDateOnlyIso(booking.checkin_date);
+  const todayIso = getLocalTodayIso();
+  const isBeforeCheckInDate = Boolean(checkInIso && checkInIso > todayIso);
+
+  const isFromStayCheckin = Boolean(fromReport && fromReport.includes('stayStatus=checkin'));
+  const isFromStayCheckout = Boolean(fromReport && fromReport.includes('stayStatus=checkout'));
+  const isFromDashboard = Boolean(fromReport && fromReport.startsWith('/admin/dashboard'));
+  const backLabel = isFromStayCheckin
+    ? 'Quay lại Nhận phòng'
+    : isFromStayCheckout
+      ? 'Quay lại Trả phòng'
+      : fromReport
+        ? 'Quay lại'
+        : 'Danh sách';
+
+  const detailBreadcrumb = isFromStayCheckin
+    ? [
+        { label: 'Trả phòng', path: fromReport },
+        { label: 'Nhận phòng', path: fromReport },
+        { label: booking.code },
+      ]
+    : isFromStayCheckout
+      ? [
+          { label: 'Trả phòng', path: fromReport },
+          { label: booking.code },
+        ]
+      : isFromDashboard
+        ? [
+            { label: 'Tổng quan', path: '/admin/dashboard' },
+            { label: booking.code },
+          ]
+        : [
+            { label: 'Đặt phòng', path: '/admin/bookings' },
+            { label: booking.code },
+          ];
+
   return (
     <div>
       <PageHeader
         title={`Đơn đặt phòng: ${booking.code}`}
         description={`Khởi tạo ngày ${booking.created_at ? formatDateTimeVN(booking.created_at) : '—'}`}
-        breadcrumb={[
-          { label: 'Đặt phòng', path: '/admin/bookings' },
-          { label: booking.code }
-        ]}
+        breadcrumb={detailBreadcrumb}
         actions={
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <Link to={backTo} className="btn btn-secondary">
-              <ArrowLeft size={14} /> {fromReport ? 'Quay lại' : 'Danh sách'}
+              <ArrowLeft size={14} /> {backLabel}
             </Link>
-            {booking.status === 'PENDING' && (
+            {booking.status === 'PENDING' && canWriteBookings && (
               <button
                 type="button"
                 className="btn btn-primary"
@@ -193,17 +237,22 @@ export default function BookingDetailPage() {
                 <Check size={14} /> {approving ? 'Đang duyệt...' : 'Xác nhận đặt phòng'}
               </button>
             )}
-            {booking.status === 'CONFIRMED' && !booking.checked_in_at && (
+            {booking.status === 'CONFIRMED' && !booking.checked_in_at && canWriteBookings && (
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={stayLoading}
+                disabled={stayLoading || isBeforeCheckInDate}
+                title={
+                  isBeforeCheckInDate
+                    ? `Chưa đến ngày nhận phòng (${formatDateVN(booking.checkin_date)})`
+                    : 'Xác nhận khách đã nhận phòng'
+                }
                 onClick={handleCheckIn}
               >
                 <LogIn size={14} /> {stayLoading ? 'Đang xử lý...' : 'Xác nhận nhận phòng'}
               </button>
             )}
-            {booking.checked_in_at && !booking.checked_out_at && (
+            {booking.status === 'CONFIRMED' && booking.checked_in_at && !booking.checked_out_at && canWriteBookings && (
               <button
                 type="button"
                 className="btn btn-primary"
@@ -235,6 +284,11 @@ export default function BookingDetailPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '12px', color: '#6B7280' }}>Trạng thái đặt phòng:</span>
           <StatusBadge status={badgeStatus} />
+          {booking.status === 'CONFIRMED' && !booking.checked_in_at && isBeforeCheckInDate && (
+            <span style={{ fontSize: '12px', color: '#B45309' }}>
+              Chưa đến ngày nhận phòng (chỉ xác nhận từ ngày {formatDateVN(booking.checkin_date)}).
+            </span>
+          )}
         </div>
       </div>
 

@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
 import Pagination from '../../components/common/Pagination.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
-import { formatVND, formatDateVN, formatDateTimeVN } from '../../data/mockData.js';
+import { formatVND, formatDateVN, formatDateTimeVN, toDateOnlyIso, getLocalTodayIso } from '../../data/mockData.js';
 import { Eye, Search, RotateCcw, Check, LogIn, LogOut } from 'lucide-react';
 
-// Giá trị status lấy đúng theo CHECK constraint của bảng dbo.bookings.
+// Giá trị status lấy đúng theo CHECK constraint của bảng dbo.bookings và filter vận hành.
 const STATUS_OPTIONS = [
   { value: 'PENDING', label: 'Chờ xử lý' },
   { value: 'PAYMENT_PROCESSING', label: 'Đang thanh toán' },
@@ -17,7 +18,9 @@ const STATUS_OPTIONS = [
   { value: 'EXPIRED', label: 'Hết hạn' },
   { value: 'CANCELLED', label: 'Đã hủy' },
   { value: 'FAILED', label: 'Thất bại' },
+  { value: 'checkin', label: 'Chờ nhận phòng' },
   { value: 'checkedin', label: 'Đã nhận phòng' },
+  { value: 'checkout', label: 'Chờ trả phòng' },
   { value: 'checkedout', label: 'Đã trả phòng' },
 ];
 
@@ -45,25 +48,71 @@ export default function BookingListPage() {
     accommodations,
     fetchAccommodations,
   } = useAdmin();
+  const { currentLoggedInUser, hasPermission } = useAuth();
+  const isAdmin = currentLoggedInUser?.role === 'ADMIN';
+  const canWriteBookings =
+    isAdmin || hasPermission('bookings.write') || hasPermission('bookings.update_status');
+
+  const location = useLocation();
+  const currentListUrl = `${location.pathname}${location.search}`;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const statusFilter = (searchParams.get('status') || '').toUpperCase();
-  const stayStatus = searchParams.get('stayStatus') || '';
+  const stayStatus = (searchParams.get('stayStatus') || '').toLowerCase();
   const isStayMode = stayStatus === 'checkin' || stayStatus === 'checkout';
   const isStayFilter = stayStatus === 'checkedin' || stayStatus === 'checkedout';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [accommodationFilter, setAccommodationFilter] = useState('');
 
-  // null = dùng sort mặc định theo chế độ (createdAt desc hoặc ngày nhận/trả asc).
-  const [sortField, setSortField] = useState(null);
-  const [sortDirection, setSortDirection] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  // Gắn state phân trang / sort / override theo modeKey để khi đổi menu từ Sidebar tự reset ngay.
+  const modeKey = `${statusFilter}|${stayStatus}`;
+  const [viewState, setViewState] = useState({
+    modeKey,
+    page: 1,
+    sortField: null,
+    sortDirection: null,
+    stayOverrides: {},
+  });
+
+  const activeView = viewState.modeKey === modeKey
+    ? viewState
+    : {
+        modeKey,
+        page: 1,
+        sortField: null,
+        sortDirection: null,
+        stayOverrides: {},
+      };
+
+  const currentPage = activeView.page;
+  const sortField = activeView.sortField;
+  const sortDirection = activeView.sortDirection;
+  const stayOverrides = activeView.stayOverrides;
+
+  const updateViewState = (patchOrUpdater) => {
+    setViewState((prev) => {
+      const base = prev.modeKey === modeKey
+        ? prev
+        : {
+            modeKey,
+            page: 1,
+            sortField: null,
+            sortDirection: null,
+            stayOverrides: {},
+          };
+      const nextPatch = typeof patchOrUpdater === 'function'
+        ? patchOrUpdater(base)
+        : patchOrUpdater;
+      return { ...base, ...nextPatch, modeKey };
+    });
+  };
+
+  const setCurrentPage = (page) => updateViewState({ page });
   const [pageSize, setPageSize] = useState(10);
   const [reloadKey, setReloadKey] = useState(0);
   const [approvingId, setApprovingId] = useState(null);
   const [stayAction, setStayAction] = useState(null);
-  const [stayOverrides, setStayOverrides] = useState({});
   const [confirmAction, setConfirmAction] = useState(null);
 
   const defaultSortField = stayStatus === 'checkin'
@@ -75,8 +124,9 @@ export default function BookingListPage() {
   const activeSortField = sortField || defaultSortField;
   const activeSortDirection = sortDirection || defaultSortDirection;
 
-  const today = new Date();
-  const todayLabel = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  const todayIso = getLocalTodayIso();
+  const [yearStr, monthStr, dayStr] = todayIso.split('-');
+  const todayLabel = `${dayStr}/${monthStr}/${yearStr}`;
 
   const updateStatusFilter = (value) => {
     setSearchParams((prev) => {
@@ -90,7 +140,7 @@ export default function BookingListPage() {
       }
       return next;
     }, { replace: true });
-    setCurrentPage(1);
+    updateViewState({ page: 1, stayOverrides: {} });
   };
 
   // Nạp danh sách cơ sở lưu trú cho bộ lọc (backend tự scope theo tài khoản).
@@ -130,16 +180,25 @@ export default function BookingListPage() {
   const handleReset = () => {
     setSearchTerm('');
     setAccommodationFilter('');
-    setSearchParams({});
-    setSortField(null);
-    setSortDirection(null);
-    setCurrentPage(1);
+    if (isStayMode) {
+      setSearchParams({ stayStatus }, { replace: true });
+    } else {
+      setSearchParams({});
+    }
+    updateViewState({
+      page: 1,
+      sortField: null,
+      sortDirection: null,
+      stayOverrides: {},
+    });
   };
 
   const handleSort = (field, direction) => {
-    setSortField(field);
-    setSortDirection(direction);
-    setCurrentPage(1);
+    updateViewState({
+      sortField: field,
+      sortDirection: direction,
+      page: 1,
+    });
   };
 
   const handleStayAction = async (bookingId, type) => {
@@ -150,12 +209,14 @@ export default function BookingListPage() {
         : await checkOutBooking(bookingId);
 
       // Cập nhật tại chỗ để dòng không biến mất ngay; chỉ rời danh sách khi bấm Làm mới.
-      setStayOverrides((prev) => ({
-        ...prev,
-        [bookingId]: {
-          checked_in_at: result.checkedInAt ?? prev[bookingId]?.checked_in_at ?? null,
-          checked_out_at: result.checkedOutAt ?? null,
-          operational_status: result.operationalStatus,
+      updateViewState((prev) => ({
+        stayOverrides: {
+          ...prev.stayOverrides,
+          [bookingId]: {
+            checked_in_at: result.checkedInAt ?? prev.stayOverrides[bookingId]?.checked_in_at ?? null,
+            checked_out_at: result.checkedOutAt ?? null,
+            operational_status: result.operationalStatus,
+          },
         },
       }));
     } catch (error) {
@@ -198,6 +259,7 @@ export default function BookingListPage() {
     render: (row) => (
       <Link
         to={`/admin/bookings/${row.id}`}
+        state={{ from: currentListUrl }}
         style={{ fontWeight: 600, color: '#292D32', textDecoration: 'underline' }}
         className="code-badge"
       >
@@ -309,12 +371,13 @@ export default function BookingListPage() {
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <Link
             to={`/admin/bookings/${row.id}`}
+            state={{ from: currentListUrl }}
             className="row-action-btn"
             title="Xem chi tiết đơn"
           >
             <Eye size={13} />
           </Link>
-          {row.status === 'PENDING' && (
+          {row.status === 'PENDING' && canWriteBookings && (
             <button
               type="button"
               className="row-action-btn"
@@ -357,11 +420,16 @@ export default function BookingListPage() {
     {
       header: 'Trạng thái',
       accessor: 'operational_status',
-      render: (row) => (
-        row.checked_in_at
-          ? <span className="badge badge-info">Đã nhận phòng lúc {formatDateTimeVN(row.checked_in_at)}</span>
-          : <span className="badge badge-warning">Chờ nhận phòng</span>
-      )
+      render: (row) => {
+        if (row.checked_in_at) {
+          return <span className="badge badge-info">Đã nhận phòng lúc {formatDateTimeVN(row.checked_in_at)}</span>;
+        }
+        const checkInIso = toDateOnlyIso(row.checkin_date);
+        if (checkInIso && checkInIso < todayIso) {
+          return <span className="badge badge-danger">Quá hạn nhận ({formatDateVN(row.checkin_date)})</span>;
+        }
+        return <span className="badge badge-warning">Nhận hôm nay</span>;
+      }
     },
     {
       header: 'Thao tác',
@@ -376,19 +444,22 @@ export default function BookingListPage() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <Link
               to={`/admin/bookings/${row.id}`}
+              state={{ from: currentListUrl }}
               className="row-action-btn"
               title="Xem chi tiết đơn"
             >
               <Eye size={13} />
             </Link>
-            <button
-              type="button"
-              className={`btn btn-sm ${isDone ? 'btn-secondary' : 'btn-primary'}`}
-              disabled={isDone || isBusy}
-              onClick={() => setConfirmAction({ row, type: 'checkin' })}
-            >
-              <LogIn size={13} /> {isDone ? 'Đã xong' : isBusy ? 'Đang xử lý...' : 'Nhận phòng'}
-            </button>
+            {canWriteBookings && (
+              <button
+                type="button"
+                className={`btn btn-sm ${isDone ? 'btn-secondary' : 'btn-primary'}`}
+                disabled={isDone || isBusy}
+                onClick={() => setConfirmAction({ row, type: 'checkin' })}
+              >
+                <LogIn size={13} /> {isDone ? 'Đã xong' : isBusy ? 'Đang xử lý...' : 'Nhận phòng'}
+              </button>
+            )}
           </div>
         );
       }
@@ -413,11 +484,19 @@ export default function BookingListPage() {
     {
       header: 'Trạng thái',
       accessor: 'operational_status',
-      render: (row) => (
-        row.checked_out_at
-          ? <span className="badge badge-info">Đã trả phòng lúc {formatDateTimeVN(row.checked_out_at)}</span>
-          : <span className="badge badge-success">Đang lưu trú</span>
-      )
+      render: (row) => {
+        if (row.checked_out_at) {
+          return <span className="badge badge-info">Đã trả phòng lúc {formatDateTimeVN(row.checked_out_at)}</span>;
+        }
+        const checkOutIso = toDateOnlyIso(row.checkout_date);
+        if (checkOutIso && checkOutIso < todayIso) {
+          return <span className="badge badge-danger">Quá hạn trả ({formatDateVN(row.checkout_date)})</span>;
+        }
+        if (checkOutIso === todayIso) {
+          return <span className="badge badge-warning">Trả hôm nay</span>;
+        }
+        return <span className="badge badge-success">Đang lưu trú</span>;
+      }
     },
     {
       header: 'Thao tác',
@@ -432,19 +511,22 @@ export default function BookingListPage() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <Link
               to={`/admin/bookings/${row.id}`}
+              state={{ from: currentListUrl }}
               className="row-action-btn"
               title="Xem chi tiết đơn"
             >
               <Eye size={13} />
             </Link>
-            <button
-              type="button"
-              className={`btn btn-sm ${isDone ? 'btn-secondary' : 'btn-primary'}`}
-              disabled={isDone || isBusy}
-              onClick={() => setConfirmAction({ row, type: 'checkout' })}
-            >
-              <LogOut size={13} /> {isDone ? 'Đã xong' : isBusy ? 'Đang xử lý...' : 'Trả phòng'}
-            </button>
+            {canWriteBookings && (
+              <button
+                type="button"
+                className={`btn btn-sm ${isDone ? 'btn-secondary' : 'btn-primary'}`}
+                disabled={isDone || isBusy}
+                onClick={() => setConfirmAction({ row, type: 'checkout' })}
+              >
+                <LogOut size={13} /> {isDone ? 'Đã xong' : isBusy ? 'Đang xử lý...' : 'Trả phòng'}
+              </button>
+            )}
           </div>
         );
       }
@@ -460,23 +542,23 @@ export default function BookingListPage() {
     : bookings;
 
   const pageTitle = stayStatus === 'checkin'
-    ? `Nhận phòng hôm nay (${todayLabel})`
+    ? `Nhận phòng (${todayLabel})`
     : stayStatus === 'checkout'
-      ? `Trả phòng hôm nay (${todayLabel})`
+      ? `Trả phòng (${todayLabel})`
       : statusFilter === 'PENDING'
         ? 'Đặt phòng chờ duyệt'
         : 'Quản lý đặt phòng';
 
   const pageDescription = stayStatus === 'checkin'
-    ? 'Danh sách khách đủ điều kiện nhận phòng hôm nay. Xác nhận khi khách đã đến nhận phòng.'
+    ? 'Danh sách đặt phòng đã xác nhận đến hạn nhận phòng (gồm đơn nhận hôm nay và quá hạn chưa nhận). Xác nhận khi khách đã đến nhận phòng.'
     : stayStatus === 'checkout'
-      ? 'Danh sách khách đang lưu trú. Xác nhận khi khách hoàn tất trả phòng.'
+      ? 'Danh sách khách đang lưu trú chờ trả phòng (gồm đơn trả hôm nay và quá ngày trả). Xác nhận khi khách hoàn tất trả phòng.'
       : 'Lọc và xử lý danh sách đặt phòng, lịch trình khách đến, tổng thanh toán và quy trình duyệt phòng.';
 
   const emptyMessage = stayStatus === 'checkin'
-    ? 'Hôm nay không có khách chờ nhận phòng.'
+    ? 'Hiện không có khách đến hạn chờ nhận phòng.'
     : stayStatus === 'checkout'
-      ? 'Hiện không có khách đang lưu trú để trả phòng.'
+      ? 'Hiện không có khách đang lưu trú chờ trả phòng.'
       : 'Không tìm thấy đơn đặt phòng nào phù hợp với bộ lọc.';
 
   const confirmMessage = confirmAction
@@ -499,7 +581,7 @@ export default function BookingListPage() {
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={() => {
-              setStayOverrides({});
+              updateViewState({ stayOverrides: {} });
               setReloadKey((key) => key + 1);
             }}
           >
@@ -577,7 +659,7 @@ export default function BookingListPage() {
           </div>
         </div>
 
-        {(!isStayMode || accommodations.length > 1) && (
+        {accommodations.length > 1 && (
           <div className="filter-group">
             <label className="filter-label" htmlFor="filter-booking-acc">Cơ sở lưu trú:</label>
             <select

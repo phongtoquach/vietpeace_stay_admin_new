@@ -35,7 +35,11 @@ export default function Sidebar() {
   const isManager = currentLoggedInUser?.role === 'ACCOMMODATION_MANAGER';
 
   // Kiểm tra quyền truy cập động theo Bảng phân quyền vai trò (RBAC Database)
-  const canViewBookings = isAdmin || hasPermission('bookings.read') || hasPermission('bookings.update_status');
+  const canViewBookings =
+    isAdmin ||
+    hasPermission('bookings.read') ||
+    hasPermission('bookings.write') ||
+    hasPermission('bookings.update_status');
   const canViewOwnFacility = isAdmin || hasPermission('accommodations.read') || hasPermission('accommodations.update');
   const canViewRooms = isAdmin || hasPermission('rooms.read') || hasPermission('rooms.manage');
   const canViewAccommodationsGroup = canViewOwnFacility || canViewRooms;
@@ -226,7 +230,13 @@ export default function Sidebar() {
                     to="/admin/bookings"
                     end
                     className={({ isActive }) =>
-                      `sidebar-sublink ${isActive && !location.search ? 'active' : ''}`
+                      `sidebar-sublink ${
+                        isActive &&
+                        !isStayBookingPage &&
+                        (locationSearchParams.get('status') || '').toUpperCase() !== 'PENDING'
+                          ? 'active'
+                          : ''
+                      }`
                     }
                     onClick={closeMobile}
                   >

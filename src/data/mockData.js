@@ -1305,6 +1305,29 @@ export function formatVND(amount) {
 }
 
 // Helper date formatter (Vietnamese convention: dd/MM/yyyy)
+export function toDateOnlyIso(dateStr) {
+  if (!dateStr) return '';
+  const str = String(dateStr).trim();
+  const datePart = str.split('T')[0].split(' ')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+    return datePart;
+  }
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getLocalTodayIso() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function formatDateVN(dateStr) {
   if (!dateStr) return '';
   const str = String(dateStr).trim();

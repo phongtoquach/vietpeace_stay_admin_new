@@ -81,7 +81,10 @@ function AdminOnlyRoute({ children }) {
 function PermissionRoute({ permission, children }) {
 	const { currentLoggedInUser, hasPermission } = useAuth();
 	const isAdmin = currentLoggedInUser?.role === 'ADMIN';
-	if (!isAdmin && !hasPermission(permission)) {
+	const hasRequiredPermission = Array.isArray(permission)
+		? permission.some((item) => hasPermission(item))
+		: hasPermission(permission);
+	if (!isAdmin && !hasRequiredPermission) {
 		return <Navigate to="/admin/dashboard" replace />;
 	}
 	return children;
@@ -119,8 +122,22 @@ export default function App() {
 						<Route path="dashboard" element={<DashboardPage />} />
 
 						{/* Bookings */}
-						<Route path="bookings" element={<BookingListPage />} />
-						<Route path="bookings/:id" element={<BookingDetailPage />} />
+						<Route
+							path="bookings"
+							element={
+								<PermissionRoute permission={['bookings.read', 'bookings.write', 'bookings.update_status']}>
+									<BookingListPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="bookings/:id"
+							element={
+								<PermissionRoute permission={['bookings.read', 'bookings.write', 'bookings.update_status']}>
+									<BookingDetailPage />
+								</PermissionRoute>
+							}
+						/>
 
 						{/* Accommodations */}
 						<Route path="accommodations" element={<AccommodationListPage />} />

@@ -66,6 +66,11 @@ export default function DashboardPage() {
   const managedAccommodationName = currentLoggedInUser?.accommodationName?.trim() || null;
   const canViewManagedFacility = hasPermission('accommodations.read') || hasPermission('accommodations.update');
   const canViewReports = isAdmin || hasPermission('reports.view');
+  const canViewBookings =
+    isAdmin ||
+    hasPermission('bookings.read') ||
+    hasPermission('bookings.write') ||
+    hasPermission('bookings.update_status');
 
   const [summary, setSummary] = useState(null);
   const [charts, setCharts] = useState(null);
@@ -106,7 +111,13 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey, canViewReports]);
+  }, [
+    reloadKey,
+    canViewReports,
+    currentLoggedInUser?.id,
+    currentLoggedInUser?.role,
+    managedAccommodationId,
+  ]);
 
   const handleRetry = () => {
     setLoading(true);
@@ -152,25 +163,52 @@ export default function DashboardPage() {
   const finSummary = finOverview?.summary || null;
   const activeFinYear = finOverview?.period?.year || new Date().getFullYear();
 
+  const isManagerHealthCard = isManager && canViewReports && Boolean(finSummary);
+  const managerNetMarginPct = finSummary?.totalNetRevenue > 0
+    ? ((finSummary.totalNetProfitAfterTax / finSummary.totalNetRevenue) * 100).toFixed(1)
+    : '0.0';
+  const managerHealthStatus = !finSummary || finSummary.propertyCount === 0
+    ? { label: 'Chưa có cơ sở', color: '#B45309', isWarning: true }
+    : finSummary.negativeCount > 0
+      ? { label: 'Đang lỗ ròng', color: '#DC2626', isWarning: true }
+      : finSummary.lowOrZeroCount > 0
+        ? { label: 'Lãi mỏng', color: '#D97706', isWarning: true }
+        : { label: 'Có lãi ổn định', color: '#15803D', isWarning: false };
+
   return (
     <div className="dashboard-modern">
       <PageHeader
         title="Tổng quan hoạt động kinh doanh"
         description={
-          isManager && managedAccommodationName ? (
+          isManager ? (
+            managedAccommodationName ? (
+              <span className="dash-manager-scope">
+                <Building2 size={14} className="dash-manager-scope-icon" aria-hidden="true" />
+                <span>Cơ sở quản lý:</span>
+                {managedAccommodationId && canViewManagedFacility ? (
+                  <Link
+                    to={`/admin/accommodations/${managedAccommodationId}`}
+                    className="dash-manager-scope-link"
+                  >
+                    {managedAccommodationName}
+                  </Link>
+                ) : (
+                  <strong className="dash-manager-scope-name">{managedAccommodationName}</strong>
+                )}
+              </span>
+            ) : (
+              <span className="dash-manager-scope" style={{ color: '#B45309' }}>
+                <Building2 size={14} className="dash-manager-scope-icon" aria-hidden="true" />
+                <span>Tài khoản Manager chưa được phân công cơ sở lưu trú.</span>
+              </span>
+            )
+          ) : isAdmin ? (
             <span className="dash-manager-scope">
               <Building2 size={14} className="dash-manager-scope-icon" aria-hidden="true" />
-              <span>Cơ sở quản lý:</span>
-              {managedAccommodationId && canViewManagedFacility ? (
-                <Link
-                  to={`/admin/accommodations/${managedAccommodationId}`}
-                  className="dash-manager-scope-link"
-                >
-                  {managedAccommodationName}
-                </Link>
-              ) : (
-                <strong className="dash-manager-scope-name">{managedAccommodationName}</strong>
-              )}
+              <span>Phạm vi dữ liệu:</span>
+              <strong className="dash-manager-scope-name">
+                Tất cả cơ sở lưu trú{finSummary?.propertyCount ? ` (${finSummary.propertyCount} cơ sở)` : ''}
+              </strong>
             </span>
           ) : undefined
         }
@@ -272,14 +310,22 @@ export default function DashboardPage() {
         <div className="dash-kpi-card">
           <div className="dash-kpi-head">
             <span className="dash-kpi-label">
-              {canViewReports && finSummary ? `Sức khỏe cơ sở (${activeFinYear})` : 'Vận hành trong ngày'}
+              {isManagerHealthCard
+                ? `Hiệu quả cơ sở (${activeFinYear})`
+                : canViewReports && finSummary
+                  ? `Sức khỏe cơ sở (${activeFinYear})`
+                  : 'Vận hành trong ngày'}
             </span>
             <span
               className="dash-kpi-icon"
               style={
-                canViewReports && finSummary?.warningCount > 0
-                  ? { background: '#FEF2F2', color: '#DC2626' }
-                  : { background: '#F0FDF4', color: '#15803D' }
+                isManagerHealthCard
+                  ? managerHealthStatus.isWarning
+                    ? { background: '#FEF2F2', color: '#DC2626' }
+                    : { background: '#F0FDF4', color: '#15803D' }
+                  : canViewReports && finSummary?.warningCount > 0
+                    ? { background: '#FEF2F2', color: '#DC2626' }
+                    : { background: '#F0FDF4', color: '#15803D' }
               }
             >
               <AlertTriangle size={17} />
@@ -289,17 +335,27 @@ export default function DashboardPage() {
             className="dash-kpi-value tabular-nums"
             style={{
               fontSize: canViewReports && finSummary ? '20px' : '22px',
-              color: canViewReports && finSummary?.warningCount > 0 ? '#DC2626' : '#111827',
+              color: isManagerHealthCard
+                ? managerHealthStatus.color
+                : canViewReports && finSummary?.warningCount > 0
+                  ? '#DC2626'
+                  : '#111827',
             }}
           >
             {loading
               ? '…'
-              : canViewReports && finSummary
-                ? `${finSummary.negativeCount} âm · ${finSummary.lowOrZeroCount} lãi mỏng`
-                : `${stats.checkinsToday + stats.checkoutsToday} lượt`}
+              : isManagerHealthCard
+                ? managerHealthStatus.label
+                : canViewReports && finSummary
+                  ? `${finSummary.negativeCount} âm · ${finSummary.lowOrZeroCount} lãi mỏng`
+                  : `${stats.checkinsToday + stats.checkoutsToday} lượt`}
           </div>
           <div className="dash-kpi-sub">
-            {canViewReports && finSummary ? (
+            {isManagerHealthCard ? (
+              finSummary.propertyCount === 0
+                ? 'Chưa phân công cơ sở quản lý'
+                : `Biên LN ròng ${managerNetMarginPct}% · Sau thuế & OPEX`
+            ) : canViewReports && finSummary ? (
               <>
                 {finSummary.profitableCount}/{finSummary.propertyCount} cơ sở có lãi · Quỹ thưởng {formatCompactVND(finSummary.estimatedTopBonusPool)}
               </>
@@ -313,23 +369,47 @@ export default function DashboardPage() {
       {/* Thanh Vận hành hôm nay & Truy cập nhanh Báo cáo (1 dòng gọn) */}
       <section className="dash-ops-strip" aria-label="Vận hành hôm nay và Báo cáo nhanh">
         <div className="dash-ops-group">
-          <span className="dash-ops-chip">
-            <Clock size={13} style={{ color: '#16A34A' }} />
-            <span>Nhận phòng hôm nay:</span>
-            <strong className="tabular-nums">{displayValue(stats.checkinsToday)}</strong>
-          </span>
-          <span className="dash-ops-chip">
-            <CheckOutIcon size={13} style={{ color: '#0284C7' }} />
-            <span>Trả phòng hôm nay:</span>
-            <strong className="tabular-nums">{displayValue(stats.checkoutsToday)}</strong>
-          </span>
-          <Link to="/admin/bookings?status=PENDING" className="dash-ops-chip" style={{ textDecoration: 'none' }}>
-            <AlertCircle size={13} style={{ color: stats.pendingBookings > 0 ? '#D97706' : '#6B7280' }} />
-            <span>Chờ duyệt:</span>
-            <strong className="tabular-nums" style={{ color: stats.pendingBookings > 0 ? '#B45309' : '#111827' }}>
-              {displayValue(stats.pendingBookings)}
-            </strong>
-          </Link>
+          {canViewBookings ? (
+            <>
+              <Link to="/admin/bookings?stayStatus=checkin" className="dash-ops-chip" style={{ textDecoration: 'none' }}>
+                <Clock size={13} style={{ color: '#16A34A' }} />
+                <span>Nhận phòng hôm nay:</span>
+                <strong className="tabular-nums">{displayValue(stats.checkinsToday)}</strong>
+              </Link>
+              <Link to="/admin/bookings?stayStatus=checkout" className="dash-ops-chip" style={{ textDecoration: 'none' }}>
+                <CheckOutIcon size={13} style={{ color: '#0284C7' }} />
+                <span>Trả phòng hôm nay:</span>
+                <strong className="tabular-nums">{displayValue(stats.checkoutsToday)}</strong>
+              </Link>
+              <Link to="/admin/bookings?status=PENDING" className="dash-ops-chip" style={{ textDecoration: 'none' }}>
+                <AlertCircle size={13} style={{ color: stats.pendingBookings > 0 ? '#D97706' : '#6B7280' }} />
+                <span>Chờ duyệt:</span>
+                <strong className="tabular-nums" style={{ color: stats.pendingBookings > 0 ? '#B45309' : '#111827' }}>
+                  {displayValue(stats.pendingBookings)}
+                </strong>
+              </Link>
+            </>
+          ) : (
+            <>
+              <span className="dash-ops-chip">
+                <Clock size={13} style={{ color: '#16A34A' }} />
+                <span>Nhận phòng hôm nay:</span>
+                <strong className="tabular-nums">{displayValue(stats.checkinsToday)}</strong>
+              </span>
+              <span className="dash-ops-chip">
+                <CheckOutIcon size={13} style={{ color: '#0284C7' }} />
+                <span>Trả phòng hôm nay:</span>
+                <strong className="tabular-nums">{displayValue(stats.checkoutsToday)}</strong>
+              </span>
+              <span className="dash-ops-chip">
+                <AlertCircle size={13} style={{ color: stats.pendingBookings > 0 ? '#D97706' : '#6B7280' }} />
+                <span>Chờ duyệt:</span>
+                <strong className="tabular-nums" style={{ color: stats.pendingBookings > 0 ? '#B45309' : '#111827' }}>
+                  {displayValue(stats.pendingBookings)}
+                </strong>
+              </span>
+            </>
+          )}
         </div>
 
         {canViewReports && (
@@ -465,6 +545,7 @@ export default function DashboardPage() {
                     <td>
                       <Link
                         to={`/admin/bookings/${b.id}`}
+                        state={{ from: '/admin/dashboard' }}
                         style={{ fontWeight: 600, color: '#292D32', textDecoration: 'underline' }}
                         className="tabular-nums"
                       >
@@ -495,6 +576,7 @@ export default function DashboardPage() {
                     <td style={{ textAlign: 'center' }}>
                       <Link
                         to={`/admin/bookings/${b.id}`}
+                        state={{ from: '/admin/dashboard' }}
                         className="row-action-btn"
                         title="Xem chi tiết đặt phòng"
                         aria-label={`Xem chi tiết đơn ${b.code}`}
@@ -562,15 +644,17 @@ export default function DashboardPage() {
               </div>
             ))}
 
-            <div style={{ marginTop: '14px', textAlign: 'center' }}>
-              <Link
-                to="/admin/bookings?stayStatus=checkin"
-                className="btn btn-secondary btn-sm"
-                style={{ width: '100%' }}
-              >
-                Mở danh sách nhận phòng
-              </Link>
-            </div>
+            {canViewBookings && (
+              <div style={{ marginTop: '14px', textAlign: 'center' }}>
+                <Link
+                  to="/admin/bookings?stayStatus=checkin"
+                  className="btn btn-secondary btn-sm"
+                  style={{ width: '100%' }}
+                >
+                  Mở danh sách nhận phòng
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>
