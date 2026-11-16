@@ -1,14 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { apiFetch } from '../../api/client.js';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
-import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import FormInput from '../../components/forms/FormInput.jsx';
 import FormSelect from '../../components/forms/FormSelect.jsx';
 import FormTextarea from '../../components/forms/FormTextarea.jsx';
-import { Plus, Edit2, Sparkles, X, Save, Search, RotateCcw, Star } from 'lucide-react';
+import { Plus, Edit2, X, Save, Search, RotateCcw, Star } from 'lucide-react';
 
 export default function AmenitiesPage() {
   const { showToast } = useAdmin();

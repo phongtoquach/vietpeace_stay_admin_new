@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
@@ -11,7 +11,6 @@ import resortPhuquocImg from '../../assets/images/resort_phuquoc_1790825997319.j
 import {
   Save,
   ArrowLeft,
-  MapPin,
   Image as ImageIcon,
   UploadCloud,
   X,

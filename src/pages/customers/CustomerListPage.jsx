@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import DataTable from '../../components/common/DataTable.jsx';
 import Pagination from '../../components/common/Pagination.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
-import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
-import { Eye, Trash2, Search, RotateCcw } from 'lucide-react';
+import { Eye, Search, RotateCcw } from 'lucide-react';
 import { apiFetch } from '../../api/client.js';
 
 export default function CustomerListPage() {

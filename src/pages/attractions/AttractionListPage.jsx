@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
@@ -11,18 +11,13 @@ import {
   Trash2,
   Power,
   Search,
-  Eye,
   AlertCircle,
   Building,
-  Image as ImageIcon,
-  CheckCircle,
-  XCircle,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
 
 export default function AttractionListPage() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialLocationId = searchParams.get('locationId') || '';
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { formatVND } from '../../data/mockData.js';
 
 const STATUS_LABELS = {
@@ -261,13 +261,10 @@ export function DoughnutChart({ data = [] }) {
   const radius = 65;
   const strokeWidth = 26;
 
-  let currentAngle = 0;
-
-  const arcs = data.map((item, idx) => {
+  const arcs = data.reduce((acc, item, idx) => {
+    const startAngle = acc.nextAngle;
     const angle = total === 0 ? 0 : (item.count / total) * 360;
-    const startAngle = currentAngle;
-    const endAngle = currentAngle + angle;
-    currentAngle += angle;
+    const endAngle = startAngle + angle;
 
     const startRad = ((startAngle - 90) * Math.PI) / 180;
     const endRad = ((endAngle - 90) * Math.PI) / 180;
@@ -280,8 +277,10 @@ export function DoughnutChart({ data = [] }) {
     const largeArc = angle > 180 ? 1 : 0;
     const pathData = `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`;
 
-    return { ...item, pathData, idx };
-  });
+    acc.items.push({ ...item, pathData, idx });
+    acc.nextAngle = endAngle;
+    return acc;
+  }, { items: [], nextAngle: 0 }).items;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px', flexWrap: 'wrap' }}>

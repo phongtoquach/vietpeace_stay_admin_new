@@ -1,4 +1,3 @@
-import React from 'react';
 import { ArrowUpDown, ArrowUp, ArrowDown, Inbox } from 'lucide-react';
 
 export default function DataTable({

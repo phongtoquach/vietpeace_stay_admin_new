@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
@@ -7,10 +7,10 @@ import FormInput from '../../components/forms/FormInput.jsx';
 import FormSelect from '../../components/forms/FormSelect.jsx';
 import FormTextarea from '../../components/forms/FormTextarea.jsx';
 import { formatVND, formatDateVN } from '../../data/mockData.js';
-import { Plus, Edit2, Trash2, X, Save, Tag } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 
 export default function PromotionsPage() {
-  const { promotions, accommodations, addPromotion, updatePromotion, deletePromotion } = useAdmin();
+  const { promotions, addPromotion, updatePromotion, deletePromotion } = useAdmin();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState(null);

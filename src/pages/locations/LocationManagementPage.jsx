@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
@@ -9,8 +9,7 @@ import {
   Edit2,
   Trash2,
   Search,
-  RotateCcw,
-  Building
+  RotateCcw
 } from 'lucide-react';
 
 // Hàm chuẩn hóa chuỗi: bỏ dấu tiếng Việt, chuyển chữ thường và đổi gạch nối '-' thành khoảng trắng

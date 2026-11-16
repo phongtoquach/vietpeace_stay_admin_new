@@ -965,7 +965,7 @@ export const ADJUSTMENT_OPTIONS = [
   { value: 'AMOUNT_DECREASE', label: 'Giảm theo số tiền', unit: 'VNĐ' }
 ];
 
-export function formatRatePeriodConfigDisplay(config, basePrice = 0) {
+export function formatRatePeriodConfigDisplay(config) {
   if (!config) return 'Chưa cấu hình';
   const adjType = config.adjustment_type || 'FIXED';
   const adjVal = config.adjustment_value !== undefined ? config.adjustment_value : config.price;

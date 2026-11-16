@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { accommodationsApi } from '../../api/accommodations.js';
 import { roomTypesApi } from '../../api/roomTypes.js';
 import { useParams, Link, useNavigate } from 'react-router-dom';

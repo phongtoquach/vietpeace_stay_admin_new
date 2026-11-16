@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { lookupsApi } from '../../api/lookups.js';
@@ -520,7 +520,6 @@ export default function AccommodationListPage() {
                   window.requestAnimationFrame(() => searchInputRef.current?.focus());
                 }
               }}
-              autoFocus={searchWasFocusedRef.current}
               id="search-acc"
               type="text"
               className="filter-input"

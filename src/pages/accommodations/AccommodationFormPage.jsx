@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import FormInput from '../../components/forms/FormInput.jsx';
@@ -10,18 +10,10 @@ import { accommodationsApi, buildImageUrl } from '../../api/accommodations.js';
 import {
   ArrowLeft,
   Save,
-  Building,
   MapPin,
-  Sparkles,
-  Image as ImageIcon,
   Landmark,
-  Plus,
-  Trash2,
   AlertCircle,
   CheckCircle2,
-  Phone,
-  Mail,
-  Globe,
   Info
 } from 'lucide-react';
 import resortDanangImg from '../../assets/images/resort_danang_1790825961463.jpg';

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 

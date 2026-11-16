@@ -1,5 +1,3 @@
-import React from 'react';
-
 // Vietnamese translation map for statuses, enums, and roles
 const STATUS_TRANSLATIONS = {
   // Statuses
@@ -58,7 +56,7 @@ const STATUS_TRANSLATIONS = {
   'standard': 'Tiêu chuẩn'
 };
 
-export default function StatusBadge({ status, type, label }) {
+export default function StatusBadge({ status, label }) {
   if (!status && !label) return null;
 
   const raw = String(label || status || '');
