@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
+import CheckoutFolioSection from '../../components/bookings/CheckoutFolioSection.jsx';
 import {
   formatVND,
   formatDateVN,
@@ -20,14 +21,18 @@ import {
   Clock,
   Check,
   LogIn,
-  LogOut
+  Receipt
 } from 'lucide-react';
 
 export default function BookingDetailPage() {
   const { id } = useParams();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const initialOpenSettle = searchParams.get('openSettle') === '1';
+  const initialOpenInvoice = searchParams.get('openInvoice') === '1';
+
   const { currentLoggedInUser, hasPermission } = useAuth();
-  const { approveBooking, checkInBooking, checkOutBooking, showToast } = useAdmin();
+  const { approveBooking, checkInBooking, showToast } = useAdmin();
   const isAdmin = currentLoggedInUser?.role === 'ADMIN';
   const canWriteBookings =
     isAdmin || hasPermission('bookings.write') || hasPermission('bookings.update_status');
@@ -43,6 +48,7 @@ export default function BookingDetailPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [approving, setApproving] = useState(false);
   const [stayLoading, setStayLoading] = useState(false);
+  const folioRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,20 +166,6 @@ export default function BookingDetailPage() {
     }
   };
 
-  const handleCheckOut = async () => {
-    setStayLoading(true);
-    try {
-      await checkOutBooking(booking.id);
-      reloadDetail();
-    } catch (err) {
-      if (err.status !== 401) {
-        showToast(`Không trả phòng được: ${err.message}`, 'error');
-      }
-    } finally {
-      setStayLoading(false);
-    }
-  };
-
   const badgeStatus = booking.operational_status === 'CHECKED_IN'
     ? 'checked-in'
     : booking.operational_status === 'CHECKED_OUT'
@@ -256,10 +248,18 @@ export default function BookingDetailPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={stayLoading}
-                onClick={handleCheckOut}
+                onClick={() => folioRef.current?.openSettle()}
               >
-                <LogOut size={14} /> {stayLoading ? 'Đang xử lý...' : 'Hoàn tất trả phòng'}
+                <Receipt size={14} /> Kết toán &amp; Trả phòng
+              </button>
+            )}
+            {booking.status === 'CONFIRMED' && booking.checked_out_at && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => folioRef.current?.openInvoice()}
+              >
+                <Printer size={14} /> Xem &amp; In Hóa đơn
               </button>
             )}
             <button type="button" onClick={handlePrint} className="btn btn-secondary">
@@ -512,6 +512,19 @@ export default function BookingDetailPage() {
               </table>
             </div>
           </div>
+
+          {booking.status === 'CONFIRMED' && (booking.checked_in_at || booking.checked_out_at) && (
+            <CheckoutFolioSection
+              ref={folioRef}
+              bookingId={booking.id}
+              accommodationId={booking.accommodation_id}
+              canWriteBookings={canWriteBookings}
+              initialOpenSettle={initialOpenSettle}
+              initialOpenInvoice={initialOpenInvoice}
+              onSettlementCompleted={reloadDetail}
+              showToast={showToast}
+            />
+          )}
         </div>
 
         {/* Right Column: Lifecycle */}

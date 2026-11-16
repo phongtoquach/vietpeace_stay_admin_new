@@ -38,6 +38,7 @@ export function mapBookingSummary(item) {
     checked_in_at: item.checkedInAt,
     checked_out_at: item.checkedOutAt,
     operational_status: item.operationalStatus,
+    settlement: item.settlement || null,
   };
 }
 
@@ -82,6 +83,7 @@ export function mapBookingDetail(item) {
     total_amount: item.pricing?.totalAmount ?? 0,
     currency: item.pricing?.currency || "VND",
     special_requests: item.specialRequests,
+    settlement: item.settlement || null,
     created_at: item.lifecycle?.createdAt,
     confirmed_at: item.lifecycle?.confirmedAt,
     cancelled_at: item.lifecycle?.cancelledAt,

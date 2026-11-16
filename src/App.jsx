@@ -19,6 +19,7 @@ import DashboardPage from './pages/dashboard/DashboardPage.jsx';
 import AccommodationListPage from './pages/accommodations/AccommodationListPage.jsx';
 import AccommodationFormPage from './pages/accommodations/AccommodationFormPage.jsx';
 import AccommodationDetailPage from './pages/accommodations/AccommodationDetailPage.jsx';
+import IncidentalCatalogPage from './pages/accommodations/IncidentalCatalogPage.jsx';
 import AttractionListPage from './pages/attractions/AttractionListPage.jsx';
 import AttractionFormPage from './pages/attractions/AttractionFormPage.jsx';
 
@@ -141,6 +142,7 @@ export default function App() {
 
 						{/* Accommodations */}
 						<Route path="accommodations" element={<AccommodationListPage />} />
+						<Route path="accommodations/incidental-catalog" element={<IncidentalCatalogPage />} />
 						<Route path="accommodations/create" element={<AccommodationFormPage />} />
 						<Route path="accommodations/:id" element={<AccommodationDetailPage />} />
 						<Route path="accommodations/:id/edit" element={<AccommodationFormPage />} />

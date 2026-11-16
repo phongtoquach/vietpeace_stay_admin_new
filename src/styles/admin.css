@@ -1413,3 +1413,191 @@ dialog.admin-native-dialog::backdrop {
 .dash-manager-scope-link:hover {
     text-decoration: underline;
 }
+
+/* ============================================================================
+   Checkout Folio, Asset Compensation & Printable Invoice (A4 & K80)
+   ============================================================================ */
+.folio-tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.folio-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid #E5E7EB;
+    background: #FFFFFF;
+    color: #374151;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.folio-tab-btn:hover {
+    background: #F9FAFB;
+    border-color: #D1D5DB;
+}
+
+.folio-tab-btn.active {
+    background: #292D32;
+    color: #FFFFFF;
+    border-color: #292D32;
+}
+
+.folio-catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.folio-quick-card {
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #FFFFFF;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.folio-quick-card:hover {
+    border-color: #D1D5DB;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+.folio-summary-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    background: #F8FAFC;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+@media (max-width: 900px) {
+    .folio-summary-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.settle-dialog-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 18px;
+}
+
+@media (max-width: 820px) {
+    .settle-dialog-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.invoice-sheet {
+    background: #FFFFFF;
+    color: #111827;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 24px 26px;
+    font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.invoice-sheet.mode-K80 {
+    max-width: 340px;
+    margin: 0 auto;
+    padding: 14px 12px;
+    font-family: ui-monospace, 'Courier New', monospace;
+    font-size: 11.5px;
+    border-style: dashed;
+}
+
+.invoice-section-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #1F2937;
+    background: #F3F4F6;
+    padding: 6px 10px;
+    border-left: 3px solid #292D32;
+    margin: 14px 0 8px;
+}
+
+.invoice-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+
+.invoice-table th,
+.invoice-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #E5E7EB;
+    vertical-align: top;
+}
+
+.invoice-table th {
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #4B5563;
+    background: #F9FAFB;
+}
+
+@media print {
+    @page {
+        size: auto;
+        margin: 10mm;
+    }
+
+    body * {
+        visibility: hidden !important;
+    }
+
+    dialog.invoice-print-dialog,
+    dialog.invoice-print-dialog .invoice-sheet,
+    dialog.invoice-print-dialog .invoice-sheet * {
+        visibility: visible !important;
+    }
+
+    dialog.invoice-print-dialog {
+        position: static !important;
+        max-width: 100% !important;
+        max-height: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #FFFFFF !important;
+        overflow: visible !important;
+    }
+
+    dialog.invoice-print-dialog::backdrop {
+        display: none !important;
+    }
+
+    dialog.invoice-print-dialog .fin-dialog-header,
+    dialog.invoice-print-dialog .fin-dialog-footer,
+    .no-print {
+        display: none !important;
+    }
+
+    dialog.invoice-print-dialog .fin-dialog-body {
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+
+    .invoice-sheet {
+        border: none !important;
+        padding: 0 !important;
+    }
+}

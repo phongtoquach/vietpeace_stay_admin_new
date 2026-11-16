@@ -8,7 +8,7 @@ import Pagination from '../../components/common/Pagination.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import { formatVND, formatDateVN, formatDateTimeVN, toDateOnlyIso, getLocalTodayIso } from '../../data/mockData.js';
-import { Eye, Search, RotateCcw, Check, LogIn, LogOut } from 'lucide-react';
+import { Eye, Search, RotateCcw, Check, LogIn, Receipt, Printer } from 'lucide-react';
 
 // Giá trị status lấy đúng theo CHECK constraint của bảng dbo.bookings và filter vận hành.
 const STATUS_OPTIONS = [
@@ -43,7 +43,6 @@ export default function BookingListPage() {
     fetchBookings,
     approveBooking,
     checkInBooking,
-    checkOutBooking,
     showToast,
     accommodations,
     fetchAccommodations,
@@ -201,12 +200,10 @@ export default function BookingListPage() {
     });
   };
 
-  const handleStayAction = async (bookingId, type) => {
-    setStayAction({ id: bookingId, type });
+  const handleStayAction = async (bookingId) => {
+    setStayAction({ id: bookingId, type: 'checkin' });
     try {
-      const result = type === 'checkin'
-        ? await checkInBooking(bookingId)
-        : await checkOutBooking(bookingId);
+      const result = await checkInBooking(bookingId);
 
       // Cập nhật tại chỗ để dòng không biến mất ngay; chỉ rời danh sách khi bấm Làm mới.
       updateViewState((prev) => ({
@@ -233,9 +230,9 @@ export default function BookingListPage() {
       return;
     }
 
-    const { row, type } = confirmAction;
+    const { row } = confirmAction;
     setConfirmAction(null);
-    handleStayAction(row.id, type);
+    handleStayAction(row.id);
   };
 
   const handleApprove = async (bookingId) => {
@@ -485,27 +482,42 @@ export default function BookingListPage() {
       header: 'Trạng thái',
       accessor: 'operational_status',
       render: (row) => {
+        const incidental = Number(row.settlement?.incidentalGrandTotal || 0);
+        const sStatus = row.settlement?.settlementStatus;
+
+        let stayBadge;
         if (row.checked_out_at) {
-          return <span className="badge badge-info">Đã trả phòng lúc {formatDateTimeVN(row.checked_out_at)}</span>;
+          stayBadge = <span className="badge badge-info">Đã trả phòng lúc {formatDateTimeVN(row.checked_out_at)}</span>;
+        } else {
+          const checkOutIso = toDateOnlyIso(row.checkout_date);
+          if (checkOutIso && checkOutIso < todayIso) {
+            stayBadge = <span className="badge badge-danger">Quá hạn trả ({formatDateVN(row.checkout_date)})</span>;
+          } else if (checkOutIso === todayIso) {
+            stayBadge = <span className="badge badge-warning">Trả hôm nay</span>;
+          } else {
+            stayBadge = <span className="badge badge-success">Đang lưu trú</span>;
+          }
         }
-        const checkOutIso = toDateOnlyIso(row.checkout_date);
-        if (checkOutIso && checkOutIso < todayIso) {
-          return <span className="badge badge-danger">Quá hạn trả ({formatDateVN(row.checkout_date)})</span>;
-        }
-        if (checkOutIso === todayIso) {
-          return <span className="badge badge-warning">Trả hôm nay</span>;
-        }
-        return <span className="badge badge-success">Đang lưu trú</span>;
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+            {stayBadge}
+            {(incidental > 0 || sStatus === 'PENDING_PAYMENT') && (
+              <span style={{ fontSize: '11px', fontWeight: 600, color: sStatus === 'SETTLED' ? '#166534' : '#B45309' }}>
+                {sStatus === 'SETTLED' ? 'Đã tất toán' : sStatus === 'PENDING_PAYMENT' ? 'Chờ VNPay' : 'Phát sinh'}: {formatVND(incidental)}
+              </span>
+            )}
+          </div>
+        );
       }
     },
     {
       header: 'Thao tác',
       accessor: 'actions',
       align: 'center',
-      width: '150px',
+      width: '210px',
       render: (row) => {
         const isDone = Boolean(row.checked_out_at);
-        const isBusy = stayAction?.id === row.id && stayAction?.type === 'checkout';
 
         return (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -513,20 +525,27 @@ export default function BookingListPage() {
               to={`/admin/bookings/${row.id}`}
               state={{ from: currentListUrl }}
               className="row-action-btn"
-              title="Xem chi tiết đơn"
+              title="Xem bảng kê chi tiết"
             >
               <Eye size={13} />
             </Link>
-            {canWriteBookings && (
-              <button
-                type="button"
-                className={`btn btn-sm ${isDone ? 'btn-secondary' : 'btn-primary'}`}
-                disabled={isDone || isBusy}
-                onClick={() => setConfirmAction({ row, type: 'checkout' })}
+            {isDone ? (
+              <Link
+                to={`/admin/bookings/${row.id}?openInvoice=1`}
+                state={{ from: currentListUrl }}
+                className="btn btn-sm btn-secondary"
               >
-                <LogOut size={13} /> {isDone ? 'Đã xong' : isBusy ? 'Đang xử lý...' : 'Trả phòng'}
-              </button>
-            )}
+                <Printer size={13} /> Hóa đơn
+              </Link>
+            ) : canWriteBookings ? (
+              <Link
+                to={`/admin/bookings/${row.id}?openSettle=1`}
+                state={{ from: currentListUrl }}
+                className="btn btn-sm btn-primary"
+              >
+                <Receipt size={13} /> Kết toán &amp; Trả phòng
+              </Link>
+            ) : null}
           </div>
         );
       }

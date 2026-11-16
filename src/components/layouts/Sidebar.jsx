@@ -326,15 +326,25 @@ export default function Sidebar() {
             {expandedSections.accommodations && (
               <div className="sidebar-submenu">
                 {canViewOwnFacility && (
-                  <NavLink
-                    to="/admin/accommodations"
-                    className={({ isActive }) =>
-                      `sidebar-sublink ${isActive && !location.pathname.includes('/room-types') ? 'active' : ''}`
-                    }
-                    onClick={closeMobile}
-                  >
-                    {isManager ? 'Thông tin cơ sở' : 'Tất cả cơ sở lưu trú'}
-                  </NavLink>
+                  <>
+                    <NavLink
+                      to="/admin/accommodations"
+                      end
+                      className={({ isActive }) =>
+                        `sidebar-sublink ${isActive ? 'active' : ''}`
+                      }
+                      onClick={closeMobile}
+                    >
+                      {isManager ? 'Thông tin cơ sở' : 'Tất cả cơ sở lưu trú'}
+                    </NavLink>
+                    <NavLink
+                      to="/admin/accommodations/incidental-catalog"
+                      className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
+                      onClick={closeMobile}
+                    >
+                      Danh mục phát sinh &amp; Tài sản
+                    </NavLink>
+                  </>
                 )}
                 {canViewRooms && (
                   <>
