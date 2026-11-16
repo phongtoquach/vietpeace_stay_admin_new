@@ -22,7 +22,7 @@ import {
 } from '../data/mockData.js';
 
 const AdminContext = createContext(null);
-const API_BASE_URL = 'http://localhost:3002/api/admin';
+const API_BASE_URL = import.meta.env.VITE_ADMIN_API_BASE_URL || 'http://localhost:3002/api/admin';
 
 async function readAdminResponse(response) {
   const result = await response.json().catch(() => null);
@@ -106,6 +106,7 @@ export function AdminProvider({ children }) {
   };
 
   useEffect(() => {
+    if (currentLoggedInUser?.role !== 'ADMIN') return;
     fetchLocations().catch((error) => console.error("Lỗi tải điểm đến:", error));
     fetchAttractions();
   }, [currentLoggedInUser]);

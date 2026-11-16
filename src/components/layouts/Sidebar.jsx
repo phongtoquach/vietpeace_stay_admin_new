@@ -38,14 +38,29 @@ export default function Sidebar() {
   const canViewBookings =
     isAdmin ||
     hasPermission('bookings.read') ||
-    hasPermission('bookings.write') ||
-    hasPermission('bookings.update_status');
-  const canViewOwnFacility = isAdmin || hasPermission('accommodations.read') || hasPermission('accommodations.update');
-  const canViewRooms = isAdmin || hasPermission('rooms.read') || hasPermission('rooms.manage');
+    hasPermission('bookings.write');
+  const canViewOwnFacility =
+    isAdmin ||
+    hasPermission('accommodations.read') ||
+    hasPermission('accommodations.write');
+  const canViewRooms =
+    isAdmin ||
+    hasPermission('accommodations.read') ||
+    hasPermission('accommodations.write');
   const canViewAccommodationsGroup = canViewOwnFacility || canViewRooms;
-  const canViewPricing = isAdmin || hasPermission('pricing.read') || hasPermission('pricing.write');
-  const canViewPromotions = isAdmin || hasPermission('promotions.read') || hasPermission('promotions.manage');
-  const canViewCustomers = isAdmin || isManager || hasPermission('customers.read') || hasPermission('customers.manage');  
+  const canViewPricing =
+    isAdmin ||
+    hasPermission('pricing.read') ||
+    hasPermission('pricing.write');
+  const canViewPromotions =
+    isAdmin ||
+    hasPermission('promotions.read') ||
+    hasPermission('promotions.write');
+  const canViewCustomers =
+    isAdmin ||
+    isManager ||
+    hasPermission('customers.read') ||
+    hasPermission('customers.write');
   const canViewReports = isAdmin || hasPermission('reports.view');
 
 

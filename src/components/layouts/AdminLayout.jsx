@@ -1,6 +1,5 @@
-import React, { useEffect, useContext } from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
-
+import React, { useContext } from 'react';
+import { Outlet, Navigate, Link } from 'react-router-dom';
 
 import AuthContext from "../../context/AuthContext";
 import { useAdmin } from '../../context/AdminContext.jsx';
@@ -12,56 +11,54 @@ import ForcePasswordChangeModal from '../common/ForcePasswordChangeModal.jsx';
 
 export default function AdminLayout({ breadcrumbs = [] }) {
 	const { isMobileSidebarOpen, setIsMobileSidebarOpen } = useAdmin();
+    const {
+        currentLoggedInUser,
+        isCheckingAuthen,
+        authError,
+        currentUrl,
+        refreshAuth,
+    } = useContext(AuthContext);
 
-	console.log("[AdminLayout] Vừa vào hàm component AdminLayout !");
-
-    const { currentLoggedInUser, isCheckingAuthen, authError, currentUrl, isRouteUrlChanged, logout } = useContext(AuthContext);
-
-    useEffect(() => {
-        console.log("[AdminLayout] đang chạy useEffect() của component AdminLayout !");
-        
-        // hàm cleanup
-        return () => {
-            console.log("[AdminLayout] đang chạy hàm cleanup của useEffect() !");
-        };
-    });
-
-    console.log("[AdminLayout] useState AuthProvider.isCheckingAuthen : ", isCheckingAuthen);
-    console.log("[AdminLayout] biến AuthProvider.isRouteUrlChanged : ", isRouteUrlChanged);
-    
-    if (isCheckingAuthen === true || isRouteUrlChanged === true) {
-        console.log("[AdminLayout] useState AuthProvider.isCheckingAuthen = true HOẶC AuthProvider.isRouteUrlChanged = true ! Return JSX Element thông báo đang check đăng nhập !");
+    if (isCheckingAuthen === true) {
         return (
-            <div>
+            <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: '14px' }}>
                 <p>Đang kiểm tra đăng nhập...</p>
             </div>
         );
     }
 
-    // Nếu authError !== null : có lỗi về network
-    if (authError) {
-        console.log("[RequireUserLoggedIn] useState AuthProvider.authError khac NULL ! Return JSX Element thông báo vui lòng check lại kết nối !");
+    if (authError && !currentLoggedInUser) {
         return (
-            <div>
-                <h2>Không thể xác minh đăng nhập</h2>
-                <p>
-                    Vui lòng kiểm tra kết nối và thử lại.
-                </p>
+            <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', backgroundColor: '#F3F4F6' }}>
+                <div style={{ maxWidth: '420px', width: '100%', backgroundColor: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: '12px', padding: '24px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>
+                        Không thể xác minh đăng nhập
+                    </h2>
+                    <p style={{ fontSize: '13.5px', color: '#475569', marginBottom: '18px' }}>
+                        Vui lòng kiểm tra kết nối máy chủ và thử lại.
+                    </p>
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => refreshAuth?.({ silent: false })}
+                        >
+                            Thử lại
+                        </button>
+                        <Link to="/login" className="btn btn-secondary">
+                            Về trang đăng nhập
+                        </Link>
+                    </div>
+                </div>
             </div>
         );
     }
 
-    // Session dang nhap cua user khong ton tai
     if (!currentLoggedInUser) {
-        console.log("[AdminLayout] useState AuthProvider.currentLoggedInUser = NULL ! Session đăng nhập của user không tồn tại ! Chuyển qua trang login !");
         return (
-            <Navigate to="/login" replace state={{ from: currentUrl }}/>
+            <Navigate to="/login" replace state={{ from: currentUrl }} />
         );
     }
-
-    // Session còn tồn tại. Tức là còn đang trong phiên login
-    console.log("[AdminLayout] useState AuthProvider.currentLoggedInUser khác NULL : ", currentLoggedInUser);
-    console.log("[AdminLayout] Session còn tồn tại ! Tiếp tục đi đến route con bên trong AdminLayout !");
 
 	return (
 		<div className="app-container">

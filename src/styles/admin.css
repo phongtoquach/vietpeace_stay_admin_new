@@ -1,6 +1,7 @@
 /* VietPeace Stay - Admin Layout Styles */
 @import "./variables.css";
 @import "./global.css";
+@import "./auth.css";
 
 /* App Container */
 .app-container {
@@ -646,48 +647,7 @@
   gap: 8px;
 }
 
-/* Auth Pages */
-.auth-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #EDF0F5;
-  padding: 20px;
-}
-
-.auth-card {
-  width: 100%;
-  max-width: 400px;
-  background-color: #FFFFFF;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-  padding: 28px 24px;
-}
-
-.auth-brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.auth-title {
-  font-size: 18px;
-  font-weight: 700;
-  text-align: center;
-  color: var(--color-primary-text);
-  margin-bottom: 4px;
-}
-
-.auth-subtitle {
-  font-size: 13px;
-  text-align: center;
-  color: var(--color-secondary-text);
-  margin-bottom: 22px;
-}
+/* Auth Pages styles live in ./auth.css */
 
 /* Responsive */
 @media (max-width: 768px) {

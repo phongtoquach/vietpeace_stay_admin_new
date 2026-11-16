@@ -2,6 +2,19 @@ export function isImeComposing(event) {
   return Boolean(event?.nativeEvent?.isComposing || event?.keyCode === 229);
 }
 
+export function mergeConversationMessages(existing = [], incoming = []) {
+  const savedClientIds = new Set(incoming.filter((m) => !m.localStatus && m.clientMessageId).map((m) => m.clientMessageId));
+  const byId = new Map();
+  for (const message of [...existing.filter((m) => !m.localStatus || !savedClientIds.has(m.clientMessageId)), ...incoming]) {
+    const key = String(message.id || message.clientMessageId);
+    byId.set(key, { ...byId.get(key), ...message });
+  }
+  return [...byId.values()].sort((a, b) => {
+    const time = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    return (Number.isFinite(time) && time) || Number(a.sequence || Number.MAX_SAFE_INTEGER) - Number(b.sequence || Number.MAX_SAFE_INTEGER);
+  });
+}
+
 /** Return up to 2 uppercase initials for list and header avatars. */
 export function getInitials(name, fallback = "KH") {
   const clean = String(name || "").trim();

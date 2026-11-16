@@ -34,6 +34,7 @@ import {
   getInitials,
   groupChatMessages,
   isImeComposing,
+  mergeConversationMessages,
 } from "./chatUtils";
 import { makeClientMsgId } from "./InternalChatStore";
 import "./chat.css";
@@ -117,6 +118,9 @@ export default function ChatOperations() {
   const [busyAction, setBusyAction] = useState(false);
   const [draftingAi, setDraftingAi] = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [historyByConv, setHistoryByConv] = useState({});
+  const loadingHistoryRef = useRef(new Set());
+  const historyGenerationRef = useRef(0);
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditEvents, setAuditEvents] = useState([]);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -222,6 +226,7 @@ export default function ChatOperations() {
   // Load selected conversation messages & join room & mark read (Manager ONLY!)
   useEffect(() => {
     if (!activeConvId) return;
+    historyGenerationRef.current += 1;
     let alive = true;
     async function fetchMessages() {
       await Promise.resolve();
@@ -239,7 +244,11 @@ export default function ChatOperations() {
         const res = await adminChatClient.getMessages(activeConvId, { limit: 80 });
         if (!alive) return;
         const items = res.items || [];
-        setConvMessagesById((prev) => ({ ...prev, [Number(activeConvId)]: items }));
+        setConvMessagesById((prev) => ({ ...prev, [Number(activeConvId)]: mergeConversationMessages(prev[Number(activeConvId)], items) }));
+        const ownItems = items.filter((m) => !m.conversationId || Number(m.conversationId) === Number(activeConvId));
+        setHistoryByConv((prev) => prev[Number(activeConvId)] ? prev : {
+          ...prev, [Number(activeConvId)]: { hasMore: ownItems.length >= 80, loading: false },
+        });
         if (isManager && items.length > 0) {
           const maxPublicSeq = items
             .filter((m) => m.visibility === "PUBLIC")
@@ -260,8 +269,43 @@ export default function ChatOperations() {
 
     return () => {
       alive = false;
+      historyGenerationRef.current += 1;
+      adminChatClient.socket?.emit("conversation:leave", { conversationId: activeConvId });
     };
   }, [activeConvId, isManager, setConvMessagesById, showToast, upsertConversation]);
+
+  async function loadOlderMessages() {
+    const cid = Number(activeConvId);
+    if (!cid || loadingHistoryRef.current.has(cid)) return;
+    const sequences = selectedMessages.filter((m) => !m.localStatus &&
+      (!m.conversationId || Number(m.conversationId) === cid) && Number(m.sequence) > 0).map((m) => Number(m.sequence));
+    if (!sequences.length) return;
+    const beforeSequence = Math.min(...sequences);
+    const generation = historyGenerationRef.current;
+    const el = streamRef.current;
+    const height = el?.scrollHeight || 0;
+    const top = el?.scrollTop || 0;
+    isNearBottomRef.current = false;
+    loadingHistoryRef.current.add(cid);
+    setHistoryByConv((prev) => ({ ...prev, [cid]: { ...prev[cid], loading: true } }));
+    try {
+      const res = await adminChatClient.getMessages(cid, { limit: 80, beforeSequence });
+      if (generation !== historyGenerationRef.current) return;
+      const items = res.items || [];
+      setConvMessagesById((prev) => ({ ...prev, [cid]: mergeConversationMessages(prev[cid], items) }));
+      setHistoryByConv((prev) => ({ ...prev, [cid]: {
+        loading: false, hasMore: items.length >= 80 && items.some((m) => Number(m.sequence) < beforeSequence),
+      } }));
+      requestAnimationFrame(() => {
+        if (el && generation === historyGenerationRef.current) el.scrollTop = top + el.scrollHeight - height;
+      });
+    } catch (err) {
+      if (generation === historyGenerationRef.current) showToast?.(err.message || "Không thể tải tin nhắn cũ.", "error");
+    } finally {
+      loadingHistoryRef.current.delete(cid);
+      setHistoryByConv((prev) => prev[cid] ? { ...prev, [cid]: { ...prev[cid], loading: false } } : prev);
+    }
+  }
 
   useEffect(() => {
     if (isNearBottomRef.current) {
@@ -742,6 +786,12 @@ export default function ChatOperations() {
 
               <div className="vps-stream-shell">
                 <div className="vps-main-stream" ref={streamRef} onScroll={handleStreamScroll}>
+                  {historyByConv[Number(activeConvId)]?.hasMore && (
+                    <button type="button" className="vps-btn-outline" disabled={historyByConv[Number(activeConvId)]?.loading}
+                      onClick={loadOlderMessages}>
+                      {historyByConv[Number(activeConvId)]?.loading ? "Đang tải…" : "Tải tin nhắn cũ"}
+                    </button>
+                  )}
                   {loadingMsgs && selectedMessages.length === 0 ? (
                     <div className="vps-empty-pane">
                       <Loader2 size={20} className="vps-adm-spin" /> Đang tải lịch sử hội thoại…

@@ -1,4 +1,3 @@
-import ValidatedForm, { FieldError } from '../forms/ValidatedForm';
 import { useState, useRef, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -18,11 +17,17 @@ import {
   Building2,
   ShieldCheck,
   Lock,
+  Mail,
+  Phone,
   Eye,
   EyeOff,
   X,
   AlertTriangle,
 } from 'lucide-react';
+
+const ADMIN_API_BASE_URL =
+  import.meta.env.VITE_ADMIN_API_BASE_URL || 'http://localhost:3002/api/admin';
+const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 export default function Header({ breadcrumbItems = [] }) {
   const {
@@ -33,7 +38,7 @@ export default function Header({ breadcrumbItems = [] }) {
     showToast,
   } = useAdmin();
 
-  const { currentLoggedInUser, logout } = useContext(AuthContext);
+  const { currentLoggedInUser, setCurrentLoggedInUser, logout } = useContext(AuthContext);
   const {
     isAdmin: isChatAdmin,
     isManager,
@@ -53,9 +58,19 @@ export default function Header({ breadcrumbItems = [] }) {
 
   // Modal Hồ sơ cá nhân & Đổi mật khẩu chủ động
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    fullName: '',
+    phoneNumber: '',
+    personalEmail: '',
+  });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
+
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -99,10 +114,82 @@ export default function Header({ breadcrumbItems = [] }) {
     logout();
   };
 
+  const handleOpenProfileModal = () => {
+    setDropdownOpen(false);
+    setProfileForm({
+      fullName: currentLoggedInUser?.fullName || '',
+      phoneNumber: currentLoggedInUser?.phoneNumber || '',
+      personalEmail: currentLoggedInUser?.personalEmail || '',
+    });
+    setProfileError('');
+    setProfileModalOpen(true);
+  };
+
+  const handleProfileSaveSubmit = async (e) => {
+    e.preventDefault();
+    if (profileLoading) return;
+    setProfileError('');
+
+    const trimmedName = profileForm.fullName.trim();
+    const trimmedPhone = profileForm.phoneNumber.trim();
+    const trimmedPersonalEmail = profileForm.personalEmail.trim().toLowerCase();
+
+    if (!trimmedName) {
+      setProfileError('Vui lòng nhập họ và tên.');
+      return;
+    }
+    if (!isAdmin && !trimmedPersonalEmail) {
+      setProfileError('Tài khoản Quản lý cơ sở bắt buộc phải có email cá nhân.');
+      return;
+    }
+    if (trimmedPersonalEmail && !EMAIL_REGEX.test(trimmedPersonalEmail)) {
+      setProfileError('Email cá nhân không đúng định dạng.');
+      return;
+    }
+
+    setProfileLoading(true);
+    try {
+      const response = await fetch(`${ADMIN_API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          fullName: trimmedName,
+          phoneNumber: trimmedPhone,
+          personalEmail: trimmedPersonalEmail,
+        }),
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.success) {
+        const errDetail =
+          result?.errors?.personalEmail ||
+          result?.errors?.phoneNumber ||
+          result?.errors?.fullName ||
+          result?.message ||
+          'Không thể cập nhật hồ sơ cá nhân lúc này.';
+        throw new Error(errDetail);
+      }
+
+      if (result?.data?.userInfo && typeof setCurrentLoggedInUser === 'function') {
+        setCurrentLoggedInUser(result.data.userInfo);
+      }
+
+      setProfileModalOpen(false);
+      showToast(result.message || 'Đã cập nhật hồ sơ cá nhân thành công!');
+    } catch (err) {
+      setProfileError(err.message || 'Lỗi khi cập nhật hồ sơ cá nhân.');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
   const handleOpenPasswordModal = () => {
     setDropdownOpen(false);
+    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
+    setShowCurrentPassword(false);
     setShowNewPassword(false);
     setShowConfirmPassword(false);
     setPasswordError('');
@@ -111,10 +198,23 @@ export default function Header({ breadcrumbItems = [] }) {
 
   const handlePasswordChangeSubmit = async (e) => {
     e.preventDefault();
+    if (passwordLoading) return;
     setPasswordError('');
 
+    if (!currentPassword) {
+      setPasswordError('Vui lòng nhập mật khẩu hiện tại.');
+      return;
+    }
     if (newPassword.length < 8) {
       setPasswordError('Mật khẩu mới phải có tối thiểu 8 ký tự.');
+      return;
+    }
+    if (new TextEncoder().encode(newPassword).length > 72) {
+      setPasswordError('Mật khẩu mới không được vượt quá 72 byte UTF-8.');
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPasswordError('Mật khẩu mới phải khác mật khẩu hiện tại.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -124,20 +224,62 @@ export default function Header({ breadcrumbItems = [] }) {
 
     setPasswordLoading(true);
     try {
-      const response = await fetch('http://localhost:3002/api/admin/auth/change-initial-password', {
+      const response = await fetch(`${ADMIN_API_BASE_URL}/auth/change-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ newPassword }),
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          confirmPassword,
+        }),
       });
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || 'Không thể đổi mật khẩu lúc này.');
+      if (!response.ok || !result?.success) {
+        const errDetail =
+          result?.errors?.currentPassword ||
+          result?.errors?.newPassword ||
+          result?.errors?.confirmPassword ||
+          result?.message ||
+          'Không thể đổi mật khẩu lúc này.';
+        throw new Error(errDetail);
       }
 
+      if (typeof setCurrentLoggedInUser === 'function') {
+        setCurrentLoggedInUser((prev) =>
+          prev ? { ...prev, mustChangePassword: false } : prev
+        );
+      }
+
+      try {
+        if (
+          localStorage.getItem('vietpeace_admin_remember_me') === 'true' &&
+          currentLoggedInUser?.email &&
+          typeof window.PasswordCredential === 'function' &&
+          typeof navigator?.credentials?.store === 'function'
+        ) {
+          const updatedCredential = new window.PasswordCredential({
+            id: currentLoggedInUser.email,
+            password: newPassword,
+            name:
+              currentLoggedInUser.fullName ||
+              currentLoggedInUser.displayName ||
+              currentLoggedInUser.email,
+          });
+          await navigator.credentials.store(updatedCredential);
+        } else if (typeof navigator?.credentials?.preventSilentAccess === 'function') {
+          await navigator.credentials.preventSilentAccess().catch(() => {});
+        }
+      } catch {
+        // Bỏ qua nếu trình duyệt không hỗ trợ Credential Management API
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
       setPasswordModalOpen(false);
-      showToast('Đã cập nhật mật khẩu tài khoản thành công!');
+      showToast(result.message || 'Đã cập nhật mật khẩu tài khoản thành công!');
     } catch (err) {
       setPasswordError(err.message || 'Lỗi khi đổi mật khẩu.');
     } finally {
@@ -250,13 +392,26 @@ export default function Header({ breadcrumbItems = [] }) {
                 <button
                   type="button"
                   className="header-user-dropdown-item"
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    setProfileModalOpen(true);
-                  }}
+                  onClick={handleOpenProfileModal}
                 >
                   <User size={14} color="#6B7280" />
                   <span>Hồ sơ cá nhân</span>
+                  {!currentLoggedInUser?.personalEmail && (
+                    <span
+                      style={{
+                        marginLeft: 'auto',
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '999px',
+                        backgroundColor: '#FEF3C7',
+                        color: '#92400E',
+                        border: '1px solid #FDE68A',
+                      }}
+                    >
+                      Thêm Gmail
+                    </span>
+                  )}
                 </button>
 
                 <button
@@ -520,10 +675,10 @@ export default function Header({ breadcrumbItems = [] }) {
 
       {/* MODAL: HỒ SƠ CÁ NHÂN */}
       {profileModalOpen && (
-        <div className="modal-overlay" onClick={() => setProfileModalOpen(false)}>
+        <div className="modal-overlay" onClick={() => !profileLoading && setProfileModalOpen(false)}>
           <div
             className="modal-content"
-            style={{ maxWidth: '460px', borderRadius: '10px', overflow: 'hidden' }}
+            style={{ maxWidth: '490px', borderRadius: '10px', overflow: 'hidden' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div
@@ -542,7 +697,7 @@ export default function Header({ breadcrumbItems = [] }) {
               </div>
               <button
                 type="button"
-                onClick={() => setProfileModalOpen(false)}
+                onClick={() => !profileLoading && setProfileModalOpen(false)}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -556,125 +711,244 @@ export default function Header({ breadcrumbItems = [] }) {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px' }}>
-                <div
-                  style={{
-                    width: '52px',
-                    height: '52px',
-                    borderRadius: '50%',
-                    backgroundColor: '#FFF5D6',
-                    border: '2px solid #F4C542',
-                    color: '#78350F',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '18px',
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}
-                >
-                  {displayName.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <h4 style={{ margin: '0 0 4px', fontSize: '16px', color: '#111827', fontWeight: 700 }}>
-                    {displayName}
-                  </h4>
-                  <span
+            <form onSubmit={handleProfileSaveSubmit} noValidate>
+              <div className="modal-body" style={{ padding: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                  <div
                     style={{
-                      display: 'inline-flex',
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '50%',
+                      backgroundColor: '#FFF5D6',
+                      border: '2px solid #F4C542',
+                      color: '#78350F',
+                      display: 'flex',
                       alignItems: 'center',
-                      gap: '4px',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      backgroundColor: isAdmin ? '#FEF3C7' : '#E0F2FE',
-                      color: isAdmin ? '#92400E' : '#0369A1',
+                      justifyContent: 'center',
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      flexShrink: 0,
                     }}
                   >
-                    <ShieldCheck size={12} />
-                    {isAdmin ? 'Quản trị viên cấp cao (ADMIN)' : 'Quản lý cơ sở (ACCOMMODATION_MANAGER)'}
-                  </span>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '8px',
-                  padding: '14px 16px',
-                  fontSize: '13px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px',
-                }}
-              >
-                <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px' }}>
-                    Tài khoản đăng nhập nội bộ:
-                  </span>
-                  <strong style={{ color: '#0F172A', fontFamily: 'monospace', fontSize: '13.5px' }}>
-                    {currentLoggedInUser?.email || '—'}
-                  </strong>
+                    {displayName.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 style={{ margin: '0 0 4px', fontSize: '16px', color: '#111827', fontWeight: 700 }}>
+                      {displayName}
+                    </h4>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11.5px',
+                        fontWeight: 600,
+                        backgroundColor: isAdmin ? '#FEF3C7' : '#E0F2FE',
+                        color: isAdmin ? '#92400E' : '#0369A1',
+                      }}
+                    >
+                      <ShieldCheck size={12} />
+                      {isAdmin ? 'Quản trị viên cấp cao (ADMIN)' : 'Quản lý cơ sở (ACCOMMODATION_MANAGER)'}
+                    </span>
+                  </div>
                 </div>
 
-                {currentLoggedInUser?.personalEmail && (
+                <div
+                  style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    fontSize: '13px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    marginBottom: '16px',
+                  }}
+                >
                   <div>
                     <span style={{ color: '#64748B', display: 'block', fontSize: '12px' }}>
-                      Gmail cá nhân (Nhận thông báo):
+                      Tài khoản đăng nhập nội bộ:
                     </span>
-                    <strong style={{ color: '#0284C7' }}>{currentLoggedInUser.personalEmail}</strong>
+                    <strong style={{ color: '#0F172A', fontFamily: 'monospace', fontSize: '13.5px' }}>
+                      {currentLoggedInUser?.email || '—'}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '12px' }}>
+                      Phạm vi quản lý:
+                    </span>
+                    <strong style={{ color: '#78350F' }}>
+                      {isAdmin
+                        ? 'Toàn bộ hệ thống VietPeace Stay'
+                        : currentLoggedInUser?.accommodationName || 'Cơ sở lưu trú được chỉ định'}
+                    </strong>
+                  </div>
+                </div>
+
+                {!currentLoggedInUser?.personalEmail && (
+                  <div
+                    style={{
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FDE68A',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      marginBottom: '14px',
+                      color: '#92400E',
+                      fontSize: '12.5px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '8px',
+                    }}
+                  >
+                    <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span>
+                      Tài khoản này chưa có Email cá nhân (Gmail). Hãy bổ sung Gmail cá nhân bên dưới để dùng khi quên mật khẩu và nhận lại email đăng nhập nội bộ.
+                    </span>
                   </div>
                 )}
 
+                {profileError && (
+                  <div
+                    style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FCA5A5',
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      marginBottom: '14px',
+                      color: '#B91C1C',
+                      fontSize: '13px',
+                    }}
+                  >
+                    {profileError}
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Họ và tên <span style={{ color: '#DC2626' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <User
+                      size={15}
+                      color="#94A3B8"
+                      style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)' }}
+                    />
+                    <input
+                      type="text"
+                      required
+                      value={profileForm.fullName}
+                      onChange={(e) => {
+                        setProfileForm((prev) => ({ ...prev, fullName: e.target.value }));
+                        if (profileError) setProfileError('');
+                      }}
+                      placeholder="Nhập họ và tên..."
+                      className="filter-input"
+                      style={{ width: '100%', height: '38px', paddingLeft: '34px', fontSize: '13.5px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Số điện thoại liên hệ
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Phone
+                      size={15}
+                      color="#94A3B8"
+                      style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)' }}
+                    />
+                    <input
+                      type="tel"
+                      value={profileForm.phoneNumber}
+                      onChange={(e) => {
+                        setProfileForm((prev) => ({ ...prev, phoneNumber: e.target.value }));
+                        if (profileError) setProfileError('');
+                      }}
+                      placeholder="Ví dụ: 0901234567"
+                      className="filter-input"
+                      style={{ width: '100%', height: '38px', paddingLeft: '34px', fontSize: '13.5px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px' }}>
-                    Phạm vi quản lý:
-                  </span>
-                  <strong style={{ color: '#78350F' }}>
-                    {isAdmin
-                      ? 'Toàn bộ hệ thống VietPeace Stay'
-                      : currentLoggedInUser?.accommodationName || 'Cơ sở lưu trú được chỉ định'}
-                  </strong>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Email cá nhân (Gmail nhận khôi phục mật khẩu){!isAdmin && <span style={{ color: '#DC2626' }}> *</span>}
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail
+                      size={15}
+                      color="#94A3B8"
+                      style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)' }}
+                    />
+                    <input
+                      type="email"
+                      required={!isAdmin}
+                      value={profileForm.personalEmail}
+                      onChange={(e) => {
+                        setProfileForm((prev) => ({ ...prev, personalEmail: e.target.value }));
+                        if (profileError) setProfileError('');
+                      }}
+                      placeholder="vi-du@gmail.com"
+                      className="filter-input"
+                      style={{ width: '100%', height: '38px', paddingLeft: '34px', fontSize: '13.5px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748B', lineHeight: 1.45 }}>
+                    Khi sử dụng chức năng Quên mật khẩu, hệ thống sẽ gửi lại email đăng nhập nội bộ và mật khẩu mới về địa chỉ này.
+                  </p>
                 </div>
               </div>
-            </div>
 
-            <div className="modal-footer" style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setProfileModalOpen(false);
-                  handleOpenPasswordModal();
-                }}
-              >
-                <KeyRound size={14} /> Đổi mật khẩu
-              </button>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {isAdmin && (
+              <div className="modal-footer" style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={profileLoading}
+                  onClick={() => {
+                    setProfileModalOpen(false);
+                    handleOpenPasswordModal();
+                  }}
+                >
+                  <KeyRound size={14} /> Đổi mật khẩu
+                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={profileLoading}
+                      onClick={() => {
+                        setProfileModalOpen(false);
+                        navigate('/admin/users');
+                      }}
+                    >
+                      Quản lý người dùng
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => {
-                      setProfileModalOpen(false);
-                      navigate('/admin/users');
-                    }}
+                    disabled={profileLoading}
+                    onClick={() => setProfileModalOpen(false)}
                   >
-                    Quản lý người dùng
+                    Đóng
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setProfileModalOpen(false)}
-                >
-                  Đóng
-                </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={profileLoading}
+                  >
+                    {profileLoading ? 'Đang lưu...' : 'Lưu hồ sơ'}
+                  </button>
+                </div>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
@@ -717,7 +991,7 @@ export default function Header({ breadcrumbItems = [] }) {
               </button>
             </div>
 
-            <ValidatedForm onSubmit={handlePasswordChangeSubmit}>
+            <form onSubmit={handlePasswordChangeSubmit} noValidate>
               <div className="modal-body" style={{ padding: '20px' }}>
                 {passwordError && (
                   <div
@@ -737,9 +1011,54 @@ export default function Header({ breadcrumbItems = [] }) {
 
                 <div style={{ marginBottom: '14px' }}>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Mật khẩu hiện tại:
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock
+                      size={15}
+                      color="#94A3B8"
+                      style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)' }}
+                    />
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      required
+                      name="currentPassword"
+                      autoComplete="current-password"
+                      placeholder="Nhập mật khẩu hiện tại..."
+                      value={currentPassword}
+                      onChange={(e) => {
+                        setCurrentPassword(e.target.value);
+                        if (passwordError) setPasswordError('');
+                      }}
+                      className="filter-input"
+                      style={{ width: '100%', height: '38px', paddingLeft: '34px', paddingRight: '36px', fontSize: '13.5px', boxSizing: 'border-box' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword((prev) => !prev)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#64748B',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        padding: '4px',
+                      }}
+                      title={showCurrentPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    >
+                      {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Mật khẩu mới (tối thiểu 8 ký tự):
                   </label>
-                  <FieldError name="field-21718" />
                   <div style={{ position: 'relative' }}>
                     <Lock
                       size={15}
@@ -750,11 +1069,14 @@ export default function Header({ breadcrumbItems = [] }) {
                       type={showNewPassword ? 'text' : 'password'}
                       required
                       minLength={8}
-                      name="field-21718"
-                      data-validation-label="Mật khẩu mới (tối thiểu 8 ký tự)"
+                      name="newPassword"
+                      autoComplete="new-password"
                       placeholder="Nhập mật khẩu mới..."
                       value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        if (passwordError) setPasswordError('');
+                      }}
                       className="filter-input"
                       style={{ width: '100%', height: '38px', paddingLeft: '34px', paddingRight: '36px', fontSize: '13.5px', boxSizing: 'border-box' }}
                     />
@@ -784,7 +1106,6 @@ export default function Header({ breadcrumbItems = [] }) {
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
                     Xác nhận lại mật khẩu mới:
                   </label>
-                  <FieldError name="field-23693" />
                   <div style={{ position: 'relative' }}>
                     <Lock
                       size={15}
@@ -794,11 +1115,14 @@ export default function Header({ breadcrumbItems = [] }) {
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       required
-                      name="field-23693"
-                      data-validation-label="Xác nhận lại mật khẩu mới"
+                      name="confirmPassword"
+                      autoComplete="new-password"
                       placeholder="Nhập lại mật khẩu mới..."
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (passwordError) setPasswordError('');
+                      }}
                       className="filter-input"
                       style={{ width: '100%', height: '38px', paddingLeft: '34px', paddingRight: '36px', fontSize: '13.5px', boxSizing: 'border-box' }}
                     />
@@ -838,7 +1162,7 @@ export default function Header({ breadcrumbItems = [] }) {
                   {passwordLoading ? 'Đang lưu...' : 'Lưu mật khẩu mới'}
                 </button>
               </div>
-            </ValidatedForm>
+            </form>
           </div>
         </div>
       )}

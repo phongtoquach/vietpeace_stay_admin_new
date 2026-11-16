@@ -1,7 +1,9 @@
 import ValidatedForm, { FieldError } from '../forms/ValidatedForm';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { KeyRound, ShieldAlert, CheckCircle2, Lock, Eye, EyeOff } from 'lucide-react';
+
+const API_BASE_URL = import.meta.env.VITE_ADMIN_API_BASE_URL || 'http://localhost:3002/api/admin';
 
 export default function ForcePasswordChangeModal() {
   const { currentLoggedInUser, setCurrentLoggedInUser, logout } = useAuth();
@@ -26,6 +28,11 @@ export default function ForcePasswordChangeModal() {
       return;
     }
 
+    if (new TextEncoder().encode(newPassword).length > 72) {
+      setError('Mật khẩu mới không được vượt quá 72 byte UTF-8.');
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       setError('Mật khẩu xác nhận không khớp.');
       return;
@@ -33,7 +40,7 @@ export default function ForcePasswordChangeModal() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3002/api/admin/auth/change-initial-password', {
+      const response = await fetch(`${API_BASE_URL}/auth/change-initial-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -44,6 +51,29 @@ export default function ForcePasswordChangeModal() {
 
       if (!response.ok || !result.success) {
         throw new Error(result.message || 'Không thể đổi mật khẩu lúc này.');
+      }
+
+      try {
+        if (
+          localStorage.getItem('vietpeace_admin_remember_me') === 'true' &&
+          currentLoggedInUser?.email &&
+          typeof window.PasswordCredential === 'function' &&
+          typeof navigator?.credentials?.store === 'function'
+        ) {
+          const updatedCredential = new window.PasswordCredential({
+            id: currentLoggedInUser.email,
+            password: newPassword,
+            name:
+              currentLoggedInUser.fullName ||
+              currentLoggedInUser.displayName ||
+              currentLoggedInUser.email,
+          });
+          await navigator.credentials.store(updatedCredential);
+        } else if (typeof navigator?.credentials?.preventSilentAccess === 'function') {
+          await navigator.credentials.preventSilentAccess().catch(() => {});
+        }
+      } catch {
+        // Ignore if browser rejects Credential Management API
       }
 
       setSuccess(true);

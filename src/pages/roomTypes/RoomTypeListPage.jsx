@@ -10,11 +10,15 @@ import { Plus, Edit2, Search, RotateCcw, Trash2 } from 'lucide-react';
 import { roomTypesApi } from '../../api/roomTypes.js';
 import { accommodationsApi } from '../../api/accommodations.js';
 import { useAdmin } from '../../context/AdminContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 const SEARCH_DEBOUNCE_MS = 400;
 
 export default function RoomTypeListPage() {
   const { showToast } = useAdmin();
+  const { hasPermission } = useAuth();
+  const canWriteRoomTypes = hasPermission('accommodations.write');
+  const canDeleteRoomTypes = hasPermission('accommodations.delete');
 
   // Giá trị ô tìm kiếm và giá trị đã debounce (dùng để gọi API).
   const [searchTerm, setSearchTerm] = useState('');
@@ -287,33 +291,41 @@ export default function RoomTypeListPage() {
       width: '120px',
       render: (row) => <StatusBadge status={row.statusLabel} />
     },
-    {
-      header: 'Thao tác',
-      accessor: 'actions',
-      width: '100px',
-      align: 'center',
-      render: (row) => (
-        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-          <Link
-            to={`/admin/room-types/${row.id}/edit`}
-            className="row-action-btn"
-            title="Chỉnh sửa loại phòng"
-          >
-            <Edit2 size={13} />
-          </Link>
-          <button
-            type="button"
-            className="row-action-btn delete"
-            title="Xóa loại phòng"
-            aria-label={`Xóa ${row.name}`}
-            disabled={deletingId === row.id}
-            onClick={() => setDeleteTarget(row)}
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      )
-    }
+    ...(canWriteRoomTypes || canDeleteRoomTypes
+      ? [
+          {
+            header: 'Thao tác',
+            accessor: 'actions',
+            width: '100px',
+            align: 'center',
+            render: (row) => (
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                {canWriteRoomTypes && (
+                  <Link
+                    to={`/admin/room-types/${row.id}/edit`}
+                    className="row-action-btn"
+                    title="Chỉnh sửa loại phòng"
+                  >
+                    <Edit2 size={13} />
+                  </Link>
+                )}
+                {canDeleteRoomTypes && (
+                  <button
+                    type="button"
+                    className="row-action-btn delete"
+                    title="Xóa loại phòng"
+                    aria-label={`Xóa ${row.name}`}
+                    disabled={deletingId === row.id}
+                    onClick={() => setDeleteTarget(row)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            )
+          }
+        ]
+      : [])
   ];
 
   return (
@@ -326,9 +338,11 @@ export default function RoomTypeListPage() {
           { label: 'Loại phòng' }
         ]}
         actions={
-          <Link to="/admin/room-types/create" className="btn btn-primary">
-            <Plus size={15} /> Thêm loại phòng
-          </Link>
+          canWriteRoomTypes ? (
+            <Link to="/admin/room-types/create" className="btn btn-primary">
+              <Plus size={15} /> Thêm loại phòng
+            </Link>
+          ) : null
         }
       />
 

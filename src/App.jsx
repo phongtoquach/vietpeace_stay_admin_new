@@ -141,40 +141,194 @@ export default function App() {
 						/>
 
 						{/* Accommodations */}
-						<Route path="accommodations" element={<AccommodationListPage />} />
-						<Route path="accommodations/incidental-catalog" element={<IncidentalCatalogPage />} />
-						<Route path="accommodations/create" element={<AccommodationFormPage />} />
-						<Route path="accommodations/:id" element={<AccommodationDetailPage />} />
-						<Route path="accommodations/:id/edit" element={<AccommodationFormPage />} />
+						<Route
+							path="accommodations"
+							element={
+								<PermissionRoute permission={['accommodations.read', 'accommodations.write']}>
+									<AccommodationListPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="accommodations/incidental-catalog"
+							element={
+								<PermissionRoute permission={['accommodations.read', 'accommodations.write', 'bookings.read', 'bookings.write']}>
+									<IncidentalCatalogPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="accommodations/create"
+							element={
+								<AdminOnlyRoute>
+									<AccommodationFormPage />
+								</AdminOnlyRoute>
+							}
+						/>
+						<Route
+							path="accommodations/:id"
+							element={
+								<PermissionRoute permission={['accommodations.read', 'accommodations.write']}>
+									<AccommodationDetailPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="accommodations/:id/edit"
+							element={
+								<PermissionRoute permission="accommodations.write">
+									<AccommodationFormPage />
+								</PermissionRoute>
+							}
+						/>
 
 						{/* Attractions */}
-						<Route path="attractions" element={<AttractionListPage />} />
-						<Route path="attractions/create" element={<AttractionFormPage />} />
-						<Route path="attractions/:id/edit" element={<AttractionFormPage />} />
+						<Route
+							path="attractions"
+							element={
+								<AdminOnlyRoute>
+									<AttractionListPage />
+								</AdminOnlyRoute>
+							}
+						/>
+						<Route
+							path="attractions/create"
+							element={
+								<AdminOnlyRoute>
+									<AttractionFormPage />
+								</AdminOnlyRoute>
+							}
+						/>
+						<Route
+							path="attractions/:id/edit"
+							element={
+								<AdminOnlyRoute>
+									<AttractionFormPage />
+								</AdminOnlyRoute>
+							}
+						/>
 
 						{/* Room Types */}
-						<Route path="room-types" element={<RoomTypeListPage />} />
-						<Route path="room-types/create" element={<RoomTypeFormPage />} />
-						<Route path="room-types/:id" element={<RoomTypeDetailPage />} />
-						<Route path="room-types/:id/edit" element={<RoomTypeFormPage />} />
+						<Route
+							path="room-types"
+							element={
+								<PermissionRoute permission={['accommodations.read', 'accommodations.write']}>
+									<RoomTypeListPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="room-types/create"
+							element={
+								<PermissionRoute permission="accommodations.write">
+									<RoomTypeFormPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="room-types/:id"
+							element={
+								<PermissionRoute permission={['accommodations.read', 'accommodations.write']}>
+									<RoomTypeDetailPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="room-types/:id/edit"
+							element={
+								<PermissionRoute permission="accommodations.write">
+									<RoomTypeFormPage />
+								</PermissionRoute>
+							}
+						/>
 
 						{/* Locations */}
-						<Route path="locations" element={<LocationManagementPage />} />
+						<Route
+							path="locations"
+							element={
+								<AdminOnlyRoute>
+									<LocationManagementPage />
+								</AdminOnlyRoute>
+							}
+						/>
 
 						{/* Amenities */}
-						<Route path="amenities" element={<AmenitiesPage />} />
+						<Route
+							path="amenities"
+							element={
+								<PermissionRoute permission={['accommodations.read', 'accommodations.write']}>
+									<AmenitiesPage />
+								</PermissionRoute>
+							}
+						/>
 
 						{/* Pricing & Availability */}
-						<Route path="rate-periods" element={<RatePeriodsPage />} />
-						<Route path="rate-periods/create" element={<RatePeriodFormPage />} />
-						<Route path="rate-periods/:id/edit" element={<RatePeriodFormPage />} />
-						<Route path="room-rates" element={<RoomRatesPage />} />
-						<Route path="room-availability" element={<RoomAvailabilityPage />} />
-						<Route path="pricing-history" element={<PricingWorkspace mode="history" />} />
-						<Route path="pricing-proposals" element={<PricingProposalsPage />} />
+						<Route
+							path="rate-periods"
+							element={
+								<PermissionRoute permission={['pricing.read', 'pricing.write']}>
+									<RatePeriodsPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="rate-periods/create"
+							element={
+								<PermissionRoute permission="pricing.write">
+									<RatePeriodFormPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="rate-periods/:id/edit"
+							element={
+								<PermissionRoute permission="pricing.write">
+									<RatePeriodFormPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="room-rates"
+							element={
+								<PermissionRoute permission={['pricing.read', 'pricing.write']}>
+									<RoomRatesPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="room-availability"
+							element={
+								<PermissionRoute permission={['pricing.read', 'pricing.write']}>
+									<RoomAvailabilityPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="pricing-history"
+							element={
+								<PermissionRoute permission={['pricing.read', 'pricing.write']}>
+									<PricingWorkspace mode="history" />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="pricing-proposals"
+							element={
+								<PermissionRoute permission={['pricing.read', 'pricing.write']}>
+									<PricingProposalsPage />
+								</PermissionRoute>
+							}
+						/>
 
 						{/* Promotions */}
-						<Route path="promotions" element={<PromotionsPage />} />
+						<Route
+							path="promotions"
+							element={
+								<PermissionRoute permission={['promotions.read', 'promotions.write']}>
+									<PromotionsPage />
+								</PermissionRoute>
+							}
+						/>
 
 						{/* Customers - ADMIN và ACCOMMODATION_MANAGER */}
 						<Route

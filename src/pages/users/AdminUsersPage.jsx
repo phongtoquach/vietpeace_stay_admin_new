@@ -22,7 +22,7 @@ const API_BASE = 'http://localhost:3002/api/admin';
 
 export default function AdminUsersPage() {
   const { showToast } = useAdmin();
-  const { currentLoggedInUser } = useAuth();
+  const { currentLoggedInUser, setCurrentLoggedInUser } = useAuth();
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +47,7 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState({
     fullName: '',
     phoneNumber: '',
+    personalEmail: '',
     status: 1,
   });
   const [editLoading, setEditLoading] = useState(false);
@@ -135,6 +136,7 @@ export default function AdminUsersPage() {
     setEditForm({
       fullName: user.fullName || '',
       phoneNumber: user.phoneNumber || '',
+      personalEmail: user.personalEmail || '',
       status: user.status,
     });
     setEditError('');
@@ -146,20 +148,45 @@ export default function AdminUsersPage() {
     e.preventDefault();
     setEditError('');
 
-    if (!editForm.fullName.trim()) {
+    const trimmedName = editForm.fullName.trim();
+    const trimmedPhone = editForm.phoneNumber.trim();
+    const trimmedPersonalEmail = editForm.personalEmail.trim().toLowerCase();
+
+    if (!trimmedName) {
       setEditError('Họ và tên không được để trống.');
+      return;
+    }
+
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (editingUser.role !== 'ADMIN' && !trimmedPersonalEmail) {
+      setEditError('Tài khoản Quản lý cơ sở bắt buộc phải có email cá nhân.');
+      return;
+    }
+    if (trimmedPersonalEmail && !emailRegex.test(trimmedPersonalEmail)) {
+      setEditError('Email cá nhân không đúng định dạng.');
       return;
     }
 
     setEditLoading(true);
     try {
+      const payload = editingUser.role === 'ADMIN'
+        ? {
+            fullName: trimmedName,
+            phoneNumber: trimmedPhone,
+            personalEmail: trimmedPersonalEmail,
+          }
+        : {
+            fullName: trimmedName,
+            phoneNumber: trimmedPhone,
+            personalEmail: trimmedPersonalEmail,
+            status: editForm.status,
+          };
+
       const res = await fetch(`${API_BASE}/users/${editingUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(editingUser.role === 'ADMIN'
-          ? { fullName: editForm.fullName, phoneNumber: editForm.phoneNumber }
-          : editForm),
+        body: JSON.stringify(payload),
       });
 
       const result = await res.json();
@@ -167,7 +194,21 @@ export default function AdminUsersPage() {
         throw new Error(result.message || 'Không thể cập nhật tài khoản.');
       }
 
-      showToast(`Cập nhật thông tin tài khoản "${editForm.fullName}" thành công!`);
+      if (editingUser.id === currentLoggedInUser?.id && typeof setCurrentLoggedInUser === 'function') {
+        setCurrentLoggedInUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                fullName: trimmedName,
+                displayName: trimmedName,
+                phoneNumber: trimmedPhone,
+                personalEmail: trimmedPersonalEmail || null,
+              }
+            : prev
+        );
+      }
+
+      showToast(`Cập nhật thông tin tài khoản "${trimmedName}" thành công!`);
       setEditModalOpen(false);
       fetchUsers();
       fetchSummaryStats();
@@ -741,6 +782,24 @@ export default function AdminUsersPage() {
                     className="filter-input"
                     style={{ width: '100%', height: '36px', fontSize: '13.5px' }}
                   />
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Email cá nhân (Gmail nhận khôi phục mật khẩu):{editingUser.role !== 'ADMIN' && <span style={{ color: '#dc2626' }}> *</span>}
+                  </label>
+                  <input
+                    type="email"
+                    required={editingUser.role !== 'ADMIN'}
+                    placeholder="vi-du@gmail.com"
+                    value={editForm.personalEmail}
+                    onChange={(e) => setEditForm({ ...editForm, personalEmail: e.target.value })}
+                    className="filter-input"
+                    style={{ width: '100%', height: '36px', fontSize: '13.5px' }}
+                  />
+                  <small style={{ color: '#64748b', fontSize: '12px', display: 'block', marginTop: '4px' }}>
+                    Dùng để gửi thông báo tài khoản và nhận lại email nội bộ + mật khẩu mới khi quên mật khẩu.
+                  </small>
                 </div>
 
                 {editingUser.role !== 'ADMIN' && (

@@ -1,16 +1,19 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { apiFetch } from '../../api/client.js';
 import { useAdmin } from '../../context/AdminContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusBadge from '../../components/common/StatusBadge.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
 import FormInput from '../../components/forms/FormInput.jsx';
 import FormSelect from '../../components/forms/FormSelect.jsx';
 import FormTextarea from '../../components/forms/FormTextarea.jsx';
-import { Plus, Edit2, Trash2, Sparkles, X, Save, Search, RotateCcw, Star } from 'lucide-react';
+import { Plus, Edit2, Sparkles, X, Save, Search, RotateCcw, Star } from 'lucide-react';
 
 export default function AmenitiesPage() {
   const { showToast } = useAdmin();
+  const { currentLoggedInUser } = useAuth();
+  const isAdmin = currentLoggedInUser?.role === 'ADMIN';
 
   const [amenities, setAmenities] = useState([]);
   const [amenityCategories, setAmenityCategories] = useState([]);
@@ -378,9 +381,11 @@ const handleToggleFeatured = async (item) => {
         title="Quản lý tiện nghi & Dịch vụ"
         description="Danh mục các dịch vụ chăm sóc khách hàng, trang thiết bị trong phòng, tiện ích chăm sóc sức khỏe và ẩm thực."
         actions={
-          <button type="button" onClick={handleOpenCreate} className="btn btn-primary">
-            <Plus size={15} /> Thêm tiện nghi
-          </button>
+          isAdmin ? (
+            <button type="button" onClick={handleOpenCreate} className="btn btn-primary">
+              <Plus size={15} /> Thêm tiện nghi
+            </button>
+          ) : null
         }
       />
 
@@ -461,7 +466,7 @@ const handleToggleFeatured = async (item) => {
                 <col style={{ width: '15%' }} />
                 <col style={{ width: '22%' }} />
                 <col style={{ width: '11%' }} />
-                <col style={{ width: '16%' }} />
+                {isAdmin && <col style={{ width: '16%' }} />}
             </colgroup>
 
             <thead>
@@ -475,13 +480,13 @@ const handleToggleFeatured = async (item) => {
                     </div>
                 </th>
                 <th>Trạng thái</th>
-                <th style={{ textAlign: 'center' }}>Thao tác</th>
+                {isAdmin && <th style={{ textAlign: 'center' }}>Thao tác</th>}
               </tr>
             </thead>
           <tbody>
             {filteredAmenities.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '30px' }}>
+                <td colSpan={isAdmin ? 6 : 5} style={{ textAlign: 'center', padding: '30px' }}>
                   Không tìm thấy tiện nghi nào phù hợp với bộ lọc tìm kiếm.
                 </td>
               </tr>
@@ -528,6 +533,7 @@ const handleToggleFeatured = async (item) => {
                     </td>
 
                     {/* Thao tác */}
+                    {isAdmin && (
                     <td style={{ textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center' }}>
 
@@ -576,6 +582,7 @@ const handleToggleFeatured = async (item) => {
 
                         </div>
                     </td>
+                    )}
                 </tr>
             ))
             )}
