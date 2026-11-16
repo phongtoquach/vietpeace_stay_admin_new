@@ -48,9 +48,15 @@ export default function Header({ breadcrumbItems = [] }) {
     reportsBadge,
     reportsSummary,
     pendingHandoffAlerts,
+    compensationSummary,
+    compensationBadgeCount,
   } = useAdminChat();
   const isAdmin = currentLoggedInUser?.role === 'ADMIN' || isChatAdmin;
-  const totalNotifs = waitingCount + internalUnread + (isAdmin ? reportsBadge : 0);
+  const totalNotifs =
+    waitingCount +
+    internalUnread +
+    (isAdmin ? reportsBadge : 0) +
+    compensationBadgeCount;
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -493,10 +499,10 @@ export default function Header({ breadcrumbItems = [] }) {
                   <span>Thông báo hệ thống</span>
                   <span className="badge badge-warning">{totalNotifs} Mới</span>
                 </div>
-                <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                  {totalNotifs === 0 ? (
+                <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                  {totalNotifs === 0 && !(compensationSummary?.items?.length > 0) ? (
                     <div style={{ padding: '14px', fontSize: '12px', color: '#6B7280', textAlign: 'center' }}>
-                      Không có thông báo chat hoặc cảnh báo mới.
+                      Không có thông báo mới.
                     </div>
                   ) : (
                     <>
@@ -664,6 +670,52 @@ export default function Header({ breadcrumbItems = [] }) {
                             </div>
                           </button>
                         )}
+                      {(compensationSummary?.items || []).slice(0, 5).map((neg) => {
+                        const isReviewed = neg.status !== 'PENDING';
+                        return (
+                          <button
+                            key={`neg-${neg.id}`}
+                            type="button"
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              navigate(`/admin/compensation-negotiations?focus=${neg.id}`);
+                            }}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '10px 14px',
+                              border: 'none',
+                              borderBottom: '1px solid #F3F4F6',
+                              background:
+                                neg.status === 'PENDING'
+                                  ? (neg.isUrgent ? '#FFF1F2' : '#FFFBEB')
+                                  : neg.status === 'REJECTED'
+                                    ? '#FEF2F2'
+                                    : '#F0FDF4',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <div style={{ fontWeight: 700, color: neg.status === 'REJECTED' ? '#991B1B' : isReviewed ? '#166534' : '#92400E' }}>
+                              {isAdmin
+                                ? `${neg.isUrgent ? '[KHẨN] ' : ''}Thương lượng bồi thường · #${neg.bookingCode}`
+                                : isReviewed
+                                  ? (neg.status === 'REJECTED'
+                                      ? `Admin từ chối giảm · #${neg.bookingCode}`
+                                      : `Admin đã duyệt giảm · #${neg.bookingCode}`)
+                                  : `Đang chờ Admin duyệt · #${neg.bookingCode}`}
+                            </div>
+                            <div style={{ color: '#4B5563', marginTop: '2px', fontSize: '11.5px' }}>
+                              <b>{neg.itemName}</b> —{' '}
+                              {isReviewed
+                                ? (neg.status === 'REJECTED'
+                                    ? `Giữ nguyên ${Number(neg.finalApprovedAmount || 0).toLocaleString('vi-VN')} đ`
+                                    : `Giảm ${Number(neg.approvedExtraReduction || 0).toLocaleString('vi-VN')} đ → Còn ${Number(neg.finalApprovedAmount || 0).toLocaleString('vi-VN')} đ`)
+                                : `Xin giảm ${Number(neg.requestedExtraReduction || 0).toLocaleString('vi-VN')} đ (${neg.accommodationName})`}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </>
                   )}
                 </div>

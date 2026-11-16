@@ -37,6 +37,7 @@ import AmenitiesPage from './pages/amenities/AmenitiesPage.jsx';
 // Bookings
 import BookingListPage from './pages/bookings/BookingListPage.jsx';
 import BookingDetailPage from './pages/bookings/BookingDetailPage.jsx';
+import CompensationNegotiationsPage from './pages/bookings/CompensationNegotiationsPage.jsx';
 
 // Pricing & Availability
 import RatePeriodsPage from './pages/pricing/RatePeriodsPage.jsx';
@@ -136,6 +137,14 @@ export default function App() {
 							element={
 								<PermissionRoute permission={['bookings.read', 'bookings.write', 'bookings.update_status']}>
 									<BookingDetailPage />
+								</PermissionRoute>
+							}
+						/>
+						<Route
+							path="compensation-negotiations"
+							element={
+								<PermissionRoute permission={['bookings.read', 'bookings.write', 'bookings.update_status']}>
+									<CompensationNegotiationsPage />
 								</PermissionRoute>
 							}
 						/>

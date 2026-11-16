@@ -518,6 +518,7 @@ export default function BookingDetailPage() {
               ref={folioRef}
               bookingId={booking.id}
               accommodationId={booking.accommodation_id}
+              isAdmin={isAdmin}
               canWriteBookings={canWriteBookings}
               initialOpenSettle={initialOpenSettle}
               initialOpenInvoice={initialOpenInvoice}

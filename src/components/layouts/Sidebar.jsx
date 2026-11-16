@@ -27,7 +27,7 @@ import {
 export default function Sidebar() {
   const { isSidebarOpen, isMobileSidebarOpen, setIsMobileSidebarOpen, bookings } = useAdmin();
   const { currentLoggedInUser, hasPermission } = useAuth();
-  const { waitingCount, internalUnread, reportsBadge } = useAdminChat();
+  const { waitingCount, internalUnread, reportsBadge, compensationBadgeCount } = useAdminChat();
   const location = useLocation();
   const pricingLink = path => path === '/admin/pricing-history' ? path : pricingPath(path, new URLSearchParams(location.search).get('accId'));
 
@@ -68,9 +68,11 @@ export default function Sidebar() {
   const locationSearchParams = new URLSearchParams(location.search);
   const activeReportTab = locationSearchParams.get('tab') || 'pnl';
   const currentStayStatus = locationSearchParams.get('stayStatus');
+  const isCompensationNegPage = location.pathname.startsWith('/admin/compensation-negotiations');
   const isStayBookingPage =
-    location.pathname.startsWith('/admin/bookings') &&
-    (currentStayStatus === 'checkin' || currentStayStatus === 'checkout');
+    isCompensationNegPage ||
+    (location.pathname.startsWith('/admin/bookings') &&
+      (currentStayStatus === 'checkin' || currentStayStatus === 'checkout'));
   const isBookingParentActive =
     location.pathname.startsWith('/admin/bookings') && !isStayBookingPage;
 
@@ -282,7 +284,12 @@ export default function Sidebar() {
                   <DoorOpen size={16} className="sidebar-icon" />
                   <span>Trả phòng</span>
                 </div>
-                {expandedSections.stayOperations ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {compensationBadgeCount > 0 && (
+                    <span className="sidebar-badge sidebar-badge--urgent">{compensationBadgeCount}</span>
+                  )}
+                  {expandedSections.stayOperations ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </div>
               </button>
 
               {expandedSections.stayOperations && (
@@ -304,6 +311,16 @@ export default function Sidebar() {
                     onClick={closeMobile}
                   >
                     Trả phòng
+                  </NavLink>
+                  <NavLink
+                    to="/admin/compensation-negotiations"
+                    className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
+                    onClick={closeMobile}
+                  >
+                    <span>Thương lượng bồi thường</span>
+                    {compensationBadgeCount > 0 && (
+                      <span className="sidebar-badge sidebar-badge--urgent">{compensationBadgeCount}</span>
+                    )}
                   </NavLink>
                 </div>
               )}

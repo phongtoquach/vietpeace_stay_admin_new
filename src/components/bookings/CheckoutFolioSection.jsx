@@ -11,34 +11,52 @@ import {
   CheckCircle2,
   Receipt,
   Image as ImageIcon,
+  MessageSquarePlus,
+  Clock,
+  AlertTriangle,
+  ShieldCheck,
+  Eye,
 } from 'lucide-react';
 import { formatVND, formatDateTimeVN } from '../../data/mockData.js';
+import { useAdminChat } from '../../chat/ChatContext.jsx';
 import {
   CATEGORY_META,
   COMPENSATION_MODE_META,
   SETTLEMENT_STATUS_META,
+  NEGOTIATION_STATUS_META,
   fetchBookingCheckoutFolio,
   fetchIncidentalCatalog,
   addIncidentalCharge,
   updateIncidentalCharge,
   voidIncidentalCharge,
   uploadCheckoutEvidenceImage,
+  acknowledgeCompensationNegotiation,
   resolveEvidenceImageUrl,
   getSuggestedDepreciationPercent,
 } from '../../api/checkoutSettlement.js';
 import CheckoutSettleDialog from './CheckoutSettleDialog.jsx';
 import InvoicePrintModal from './InvoicePrintModal.jsx';
+import CompensationNegotiationDialog from './CompensationNegotiationDialog.jsx';
+import CompensationReviewDialog from './CompensationReviewDialog.jsx';
 
 export default function CheckoutFolioSection({
   ref,
   bookingId,
   accommodationId,
+  isAdmin: isAdminProp = false,
   canWriteBookings = false,
   initialOpenSettle = false,
   initialOpenInvoice = false,
   onSettlementCompleted,
   showToast,
 }) {
+  const {
+    isAdmin: isChatAdmin,
+    compensationRefreshTick,
+    refreshCompensationSummary,
+  } = useAdminChat();
+  const isAdmin = Boolean(isAdminProp || isChatAdmin);
+
   const [folio, setFolio] = useState(null);
   const [catalog, setCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,12 +87,19 @@ export default function CheckoutFolioSection({
 
   const [settleModalOpen, setSettleModalOpen] = useState(false);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+  const [negotiatingCharge, setNegotiatingCharge] = useState(null);
+  const [reviewingNegotiation, setReviewingNegotiation] = useState(null);
   const consumedInitialFlagRef = useRef(false);
 
   useImperativeHandle(ref, () => ({
     openSettle: () => {
       if (folio?.permissions?.canSettle) {
         setSettleModalOpen(true);
+      } else if (folio?.permissions?.hasPendingNegotiation) {
+        showToast?.(
+          'Đơn đang có phiếu thương lượng bồi thường chờ Admin xác nhận. Vui lòng đợi Admin phản hồi hoặc hủy yêu cầu trước khi kết toán.',
+          'warning',
+        );
       }
     },
     openInvoice: () => {
@@ -82,7 +107,7 @@ export default function CheckoutFolioSection({
         setInvoiceModalOpen(true);
       }
     },
-  }), [folio]);
+  }), [folio, showToast]);
 
   const reloadData = useCallback(async (voidedFlag = includeVoided) => {
     if (!bookingId) return null;
@@ -136,6 +161,21 @@ export default function CheckoutFolioSection({
       cancelled = true;
     };
   }, [bookingId, accommodationId, includeVoided, initialOpenSettle, initialOpenInvoice, showToast]);
+
+  useEffect(() => {
+    if (!bookingId || !compensationRefreshTick) return undefined;
+    let cancelled = false;
+    fetchBookingCheckoutFolio(bookingId, { includeVoided })
+      .then((folioData) => {
+        if (!cancelled && folioData) {
+          setFolio(folioData);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [compensationRefreshTick, bookingId, includeVoided]);
 
   const minibarCatalog = useMemo(() => catalog.filter((c) => c.category === 'MINIBAR_FB'), [catalog]);
   const serviceCatalog = useMemo(() => catalog.filter((c) => c.category === 'EXTRA_SERVICE'), [catalog]);
@@ -250,17 +290,31 @@ export default function CheckoutFolioSection({
     [assetCatalog, damageForm.catalogItemId],
   );
 
-  const damagePreviewAmount = useMemo(() => {
+  const damageGrossPreview = useMemo(() => {
     const qty = Math.max(1, Number(damageForm.quantity || 1));
     const unitPrice = Number(damageForm.unitPrice || 0);
     const pct =
       damageForm.compensationMode === 'FULL_REPLACE' || damageForm.compensationMode === 'REPAIR'
         ? 100
         : Number(damageForm.depreciationPercent ?? 100);
-    const gross = Math.round(qty * unitPrice * (pct / 100));
-    const adj = Math.max(0, Number(damageForm.adjustmentAmount || 0));
-    return Math.max(0, gross - adj);
+    return Math.round(qty * unitPrice * (pct / 100));
   }, [damageForm]);
+
+  const managerDirectCap = useMemo(() => {
+    const limitCfg = folio?.permissions?.managerDirectAdjustmentLimit || { maxAmountVnd: 500000, maxPercent: 15 };
+    return Math.min(
+      Number(limitCfg.maxAmountVnd || 500000),
+      Math.round((damageGrossPreview * Number(limitCfg.maxPercent || 15)) / 100),
+    );
+  }, [damageGrossPreview, folio]);
+
+  const damagePreviewAmount = useMemo(() => {
+    const adj = Math.max(0, Number(damageForm.adjustmentAmount || 0));
+    return Math.max(0, damageGrossPreview - adj);
+  }, [damageGrossPreview, damageForm.adjustmentAmount]);
+
+  const exceedsManagerCap =
+    !isAdmin && Number(damageForm.adjustmentAmount || 0) > 0 && Number(damageForm.adjustmentAmount || 0) > managerDirectCap;
 
   const handleSelectAsset = (assetId) => {
     const found = assetCatalog.find((a) => String(a.id) === String(assetId));
@@ -360,12 +414,27 @@ export default function CheckoutFolioSection({
 
   if (!folio) return null;
 
-  const { summary, invoice, charges = [], permissions = {} } = folio;
+  const { summary, invoice, charges = [], negotiations = [], permissions = {} } = folio;
   const canEdit = Boolean(canWriteBookings && permissions.canModifyCharges);
   const canSettle = Boolean(canWriteBookings && permissions.canSettle);
+  const hasPendingNegotiation = Boolean(permissions.hasPendingNegotiation);
+  const pendingNegotiations = negotiations.filter((n) => n.status === 'PENDING');
+  const unackDecisions = negotiations.filter(
+    (n) => ['APPROVED', 'PARTIALLY_APPROVED', 'REJECTED'].includes(n.status) && !n.managerAckAt,
+  );
   const settlementMeta =
     SETTLEMENT_STATUS_META[invoice?.settlementStatus || 'DRAFT'] || SETTLEMENT_STATUS_META.DRAFT;
   const activeCharges = charges.filter((c) => c.status === 'ACTIVE');
+
+  const handleAckDecision = async (neg) => {
+    try {
+      await acknowledgeCompensationNegotiation(neg.id);
+      showToast?.(`Đã xác nhận tiếp nhận kết quả phiếu #${neg.negotiationCode}.`);
+      await Promise.all([reloadData(includeVoided), refreshCompensationSummary().catch(() => {})]);
+    } catch (error) {
+      showToast?.(error?.message || 'Không thể xác nhận thông báo.', 'error');
+    }
+  };
 
   return (
     <div className="admin-card" id="checkout-folio-panel">
@@ -410,6 +479,16 @@ export default function CheckoutFolioSection({
               onClick={() => setSettleModalOpen(true)}
             >
               <Receipt size={13} /> Kết toán &amp; Trả phòng
+            </button>
+          )}
+          {!canSettle && canWriteBookings && hasPendingNegotiation && (
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={() => pendingNegotiations[0] && setReviewingNegotiation(pendingNegotiations[0])}
+              title="Đang chờ Admin xác nhận phiếu thương lượng bồi thường"
+            >
+              <Clock size={13} /> Chờ Admin duyệt thương lượng ({pendingNegotiations.length})
             </button>
           )}
         </div>
@@ -892,8 +971,14 @@ export default function CheckoutFolioSection({
               <form onSubmit={handleAddDamage} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ fontSize: '12px', color: '#4B5563', padding: '8px 10px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '8px' }}>
                   <strong>Quy chuẩn bồi thường tài sản khách sạn (VAT 0%):</strong> Thiết bị giá trị lớn hư hỏng nặng áp dụng khấu hao theo năm trang bị{' '}
-                  (<strong>&lt;1 năm: 100%</strong> · <strong>1–2 năm: 75%</strong> · <strong>3–4 năm: 55%</strong> · <strong>≥5 năm: 35%</strong>),
-                  tránh thu 100% giá mới cho đồ đã dùng nhiều năm trừ khi mất mát toàn phần.
+                  (<strong>&lt;1 năm: 100%</strong> · <strong>1–2 năm: 75%</strong> · <strong>3–4 năm: 55%</strong> · <strong>≥5 năm: 35%</strong>).
+                  {!isAdmin && (
+                    <div style={{ marginTop: '4px', color: '#92400E' }}>
+                      <strong>Phân quyền thương lượng:</strong> Quản lý cơ sở được giảm trừ thiện chí trực tiếp tối đa{' '}
+                      <strong>500.000 đ (và ≤ 15%)</strong>. Nếu khách xin giảm sâu hơn, hãy ghi nhận khoản bồi thường theo mức chuẩn rồi bấm{' '}
+                      <strong>&quot;Thương lượng giảm (Admin)&quot;</strong> ở danh sách bên dưới để gửi kèm ảnh hiện trạng lên Admin duyệt.
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1fr 0.7fr', gap: '8px', alignItems: 'end' }}>
@@ -1009,18 +1094,27 @@ export default function CheckoutFolioSection({
                   </div>
                   <div>
                     <label htmlFor="dmg-adj" className="filter-label" style={{ display: 'block', marginBottom: '3px' }}>
-                      Giảm trừ thiện chí (VNĐ)
+                      Giảm trừ thiện chí tại quầy (VNĐ){!isAdmin ? ` · Tối đa ${formatVND(managerDirectCap)}` : ''}
                     </label>
                     <input
                       id="dmg-adj"
                       type="number"
                       min={0}
                       step={10000}
+                      aria-invalid={exceedsManagerCap ? 'true' : undefined}
                       className="filter-input tabular-nums"
-                      style={{ width: '100%' }}
+                      style={{
+                        width: '100%',
+                        borderColor: exceedsManagerCap ? '#DC2626' : undefined,
+                      }}
                       value={damageForm.adjustmentAmount}
                       onChange={(e) => setDamageForm((p) => ({ ...p, adjustmentAmount: e.target.value }))}
                     />
+                    {exceedsManagerCap && (
+                      <div style={{ fontSize: '11px', color: '#B91C1C', marginTop: '3px' }}>
+                        Vượt hạn mức Quản lý ({formatVND(managerDirectCap)}). Hãy giảm về 0đ rồi gửi Phiếu thương lượng lên Admin!
+                      </div>
+                    )}
                   </div>
                   <div style={{ padding: '7px 10px', borderRadius: '8px', backgroundColor: '#FEE2E2', color: '#991B1B', fontSize: '12.5px' }}>
                     Tạm tính bồi thường: <strong className="tabular-nums">{formatVND(damagePreviewAmount)}</strong>
@@ -1071,12 +1165,109 @@ export default function CheckoutFolioSection({
                       )}
                     </div>
                   </div>
-                  <button type="submit" className="btn btn-sm btn-primary" disabled={saving || uploadingImage}>
+                  <button type="submit" className="btn btn-sm btn-primary" disabled={saving || uploadingImage || exceedsManagerCap}>
                     <Plus size={13} /> Ghi nhận bồi thường
                   </button>
                 </div>
               </form>
             )}
+          </div>
+        )}
+
+        {/* Active Negotiation Alert Banners */}
+        {pendingNegotiations.length > 0 && (
+          <div
+            role="status"
+            style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              backgroundColor: '#FFFBEB',
+              border: '1px solid #F59E0B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap',
+              fontSize: '12.5px',
+              color: '#92400E',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={18} style={{ flexShrink: 0, color: '#D97706' }} />
+              <div>
+                {isAdmin ? (
+                  <>
+                    <strong>Có {pendingNegotiations.length} phiếu thương lượng giảm bồi thường đang chờ Admin kiểm tra &amp; xác nhận.</strong>{' '}
+                    Kiểm tra ý kiến khách và ảnh hư hao để chốt mức giảm hoặc từ chối.
+                  </>
+                ) : (
+                  <>
+                    <strong>Đang chờ Admin phản hồi {pendingNegotiations.length} phiếu thương lượng bồi thường.</strong>{' '}
+                    Kết toán trả phòng tạm khóa để đảm bảo xuất đúng hóa đơn sau khi Admin chốt giá (hoặc hủy phiếu nếu khách thanh toán mức gốc ngay).
+                  </>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={() => setReviewingNegotiation(pendingNegotiations[0])}
+            >
+              {isAdmin ? (
+                <>
+                  <ShieldCheck size={13} /> Kiểm tra &amp; Xác nhận ngay
+                </>
+              ) : (
+                <>
+                  <Eye size={13} /> Xem phiếu đang chờ
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {!isAdmin && unackDecisions.length > 0 && (
+          <div
+            role="status"
+            style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              backgroundColor: unackDecisions[0].status === 'REJECTED' ? '#FEF2F2' : '#ECFDF5',
+              border: unackDecisions[0].status === 'REJECTED' ? '1px solid #FECACA' : '1px solid #10B981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap',
+              fontSize: '12.5px',
+              color: unackDecisions[0].status === 'REJECTED' ? '#991B1B' : '#065F46',
+            }}
+          >
+            <div>
+              <strong>
+                Admin {unackDecisions[0].reviewedByName || ''} đã phản hồi phiếu #{unackDecisions[0].negotiationCode} ({unackDecisions[0].itemName}):
+              </strong>{' '}
+              {unackDecisions[0].status === 'REJECTED'
+                ? `Từ chối giảm, giữ nguyên mức đền ${formatVND(unackDecisions[0].finalApprovedAmount)}.`
+                : `Xác nhận giảm ${formatVND(unackDecisions[0].approvedExtraReduction)} → Mức đền mới: ${formatVND(unackDecisions[0].finalApprovedAmount)}.`}
+              {unackDecisions[0].adminDecisionNote ? ` (${unackDecisions[0].adminDecisionNote})` : ''}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={() => setReviewingNegotiation(unackDecisions[0])}
+              >
+                <Eye size={13} /> Xem chi tiết
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                onClick={() => handleAckDecision(unackDecisions[0])}
+              >
+                <CheckCircle2 size={13} /> Đã nhận thông báo
+              </button>
+            </div>
           </div>
         )}
 
@@ -1121,6 +1312,17 @@ export default function CheckoutFolioSection({
                   charges.map((ch) => {
                     const meta = CATEGORY_META[ch.category] || { shortLabel: ch.category, bg: '#F3F4F6', color: '#374151' };
                     const isVoided = ch.status !== 'ACTIVE';
+                    const chargeNegotiations = negotiations.filter((n) => Number(n.chargeId) === Number(ch.id));
+                    const pendingNeg = chargeNegotiations.find((n) => n.status === 'PENDING') || null;
+                    const latestNeg = chargeNegotiations[0] || null;
+                    const latestNegMeta = latestNeg
+                      ? NEGOTIATION_STATUS_META[latestNeg.status] || NEGOTIATION_STATUS_META.PENDING
+                      : null;
+                    const hasAdminRuling = chargeNegotiations.some((n) =>
+                      ['APPROVED', 'PARTIALLY_APPROVED', 'REJECTED'].includes(n.status),
+                    );
+                    const rowFinancialLocked = Boolean(pendingNeg) || (!isAdmin && hasAdminRuling);
+
                     return (
                       <tr key={ch.id} style={isVoided ? { opacity: 0.55, textDecoration: 'line-through' } : undefined}>
                         <td>
@@ -1145,9 +1347,37 @@ export default function CheckoutFolioSection({
                               {COMPENSATION_MODE_META[ch.compensationMode]?.label || ch.compensationMode}
                             </div>
                           )}
+                          {latestNeg && latestNegMeta && (
+                            <div style={{ marginTop: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => setReviewingNegotiation(latestNeg)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  backgroundColor: latestNegMeta.bg,
+                                  color: latestNegMeta.color,
+                                  border: `1px solid ${latestNegMeta.border}`,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {latestNegMeta.label}
+                                {latestNeg.status === 'PENDING'
+                                  ? ` (-${formatVND(latestNeg.requestedExtraReduction)})`
+                                  : latestNeg.status === 'REJECTED'
+                                    ? ''
+                                    : ` (-${formatVND(latestNeg.approvedExtraReduction)})`}
+                              </button>
+                            </div>
+                          )}
                         </td>
                         <td style={{ textAlign: 'center' }} className="tabular-nums">
-                          {canEdit && !isVoided && ch.category !== 'SPECIAL_CLEANING' ? (
+                          {canEdit && !isVoided && ch.category !== 'SPECIAL_CLEANING' && !rowFinancialLocked ? (
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                               <button
                                 type="button"
@@ -1201,16 +1431,49 @@ export default function CheckoutFolioSection({
                         {canEdit && (
                           <td style={{ textAlign: 'center' }}>
                             {!isVoided && (
-                              <button
-                                type="button"
-                                className="row-action-btn"
-                                style={{ color: '#B91C1C', borderColor: '#FECACA' }}
-                                title="Hủy mục phát sinh này"
-                                disabled={saving}
-                                onClick={() => handleVoidCharge(ch)}
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                {ch.category === 'DAMAGE_COMPENSATION' && (
+                                  pendingNeg ? (
+                                    <button
+                                      type="button"
+                                      className={`btn btn-sm ${isAdmin ? 'btn-primary' : 'btn-secondary'}`}
+                                      onClick={() => setReviewingNegotiation(pendingNeg)}
+                                    >
+                                      {isAdmin ? (
+                                        <>
+                                          <ShieldCheck size={12} /> Duyệt giảm
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Clock size={12} /> Chờ duyệt
+                                        </>
+                                      )}
+                                    </button>
+                                  ) : Number(ch.totalAmount || 0) > 0 ? (
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-secondary"
+                                      title="Lập phiếu đề xuất thương lượng giảm bồi thường gửi Admin"
+                                      onClick={() => setNegotiatingCharge(ch)}
+                                    >
+                                      <MessageSquarePlus size={12} /> Thương lượng giảm
+                                    </button>
+                                  ) : null
+                                )}
+                                {!rowFinancialLocked && (
+                                  <button
+                                    type="button"
+                                    className="row-action-btn"
+                                    style={{ color: '#B91C1C', borderColor: '#FECACA' }}
+                                    title="Hủy mục phát sinh này"
+                                    aria-label={`Hủy mục ${ch.itemName}`}
+                                    disabled={saving}
+                                    onClick={() => handleVoidCharge(ch)}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
                         )}
@@ -1222,6 +1485,82 @@ export default function CheckoutFolioSection({
             </table>
           </div>
         </div>
+
+        {/* Compensation Negotiation History List */}
+        {negotiations.length > 0 && (
+          <div style={{ border: '1px solid #E5E7EB', borderRadius: '10px', padding: '12px 14px', backgroundColor: '#FAFBFD' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#1F2937', marginBottom: '8px' }}>
+              Lịch sử Phiếu thương lượng giảm bồi thường ({negotiations.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {negotiations.map((neg) => {
+                const negMeta = NEGOTIATION_STATUS_META[neg.status] || NEGOTIATION_STATUS_META.PENDING;
+                return (
+                  <div
+                    key={neg.id}
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E5E7EB',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: '240px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span className="code-badge">{neg.negotiationCode}</span>
+                        <strong>{neg.itemName}</strong>
+                        <span
+                          style={{
+                            fontSize: '10.5px',
+                            fontWeight: 700,
+                            padding: '1px 7px',
+                            borderRadius: '999px',
+                            backgroundColor: negMeta.bg,
+                            color: negMeta.color,
+                            border: `1px solid ${negMeta.border}`,
+                          }}
+                        >
+                          {negMeta.label}
+                        </span>
+                      </div>
+                      <div style={{ color: '#4B5563', marginTop: '4px' }} className="tabular-nums">
+                        Mức trước: {formatVND(neg.previousFinalAmount)} · Xin giảm:{' '}
+                        <strong>-{formatVND(neg.requestedExtraReduction)}</strong> ·{' '}
+                        {neg.status === 'PENDING'
+                          ? `Đề nghị còn: ${formatVND(neg.proposedFinalAmount)}`
+                          : neg.status === 'CANCELLED'
+                            ? 'Đã hủy'
+                            : `Admin chốt: ${formatVND(neg.finalApprovedAmount)}`}
+                        {neg.evidenceImages?.length > 0 ? ` · ${neg.evidenceImages.length} ảnh bằng chứng` : ''}
+                      </div>
+                      <div style={{ color: '#6B7280', marginTop: '2px' }}>
+                        Ý kiến khách: {neg.guestOpinion}
+                      </div>
+                      {neg.adminDecisionNote && (
+                        <div style={{ color: '#1F2937', marginTop: '2px' }}>
+                          <strong>Phản hồi Admin:</strong> {neg.adminDecisionNote}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${isAdmin && neg.status === 'PENDING' ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setReviewingNegotiation(neg)}
+                    >
+                      {isAdmin && neg.status === 'PENDING' ? 'Kiểm tra & Duyệt' : 'Xem chi tiết'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Bottom Confirmation if Settled */}
         {invoice?.settlementStatus === 'SETTLED' && folio.settledPayment && (
@@ -1290,6 +1629,49 @@ export default function CheckoutFolioSection({
           isOpen={invoiceModalOpen}
           onClose={() => setInvoiceModalOpen(false)}
           folio={folio}
+        />
+      )}
+
+      {/* Manager Proposal Dialog for Compensation Negotiation */}
+      {negotiatingCharge && (
+        <CompensationNegotiationDialog
+          key={negotiatingCharge.id}
+          isOpen={Boolean(negotiatingCharge)}
+          onClose={() => setNegotiatingCharge(null)}
+          bookingId={bookingId}
+          charge={negotiatingCharge}
+          showToast={showToast}
+          onSubmitted={async (res) => {
+            setNegotiatingCharge(null);
+            if (res?.folio) {
+              setFolio(res.folio);
+            } else {
+              await reloadData(includeVoided);
+            }
+            refreshCompensationSummary().catch(() => {});
+          }}
+        />
+      )}
+
+      {/* Admin Review / Negotiation Detail Dialog */}
+      {reviewingNegotiation && (
+        <CompensationReviewDialog
+          key={reviewingNegotiation.id}
+          isOpen={Boolean(reviewingNegotiation)}
+          onClose={() => setReviewingNegotiation(null)}
+          negotiation={reviewingNegotiation}
+          isAdmin={isAdmin}
+          canWriteBookings={canWriteBookings}
+          showToast={showToast}
+          onUpdated={async (res) => {
+            setReviewingNegotiation(null);
+            if (res?.folio) {
+              setFolio(res.folio);
+            } else {
+              await reloadData(includeVoided);
+            }
+            refreshCompensationSummary().catch(() => {});
+          }}
         />
       )}
     </div>

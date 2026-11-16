@@ -10,6 +10,7 @@ import {
 import AuthContext from "../context/AuthContext";
 import { useAdmin } from "../context/AdminContext";
 import { adminChatClient } from "./ChatClient";
+import { fetchCompensationNegotiationSummary } from "../api/checkoutSettlement";
 
 function getConversationOwnerKey(conv) {
   if (!conv) return null;
@@ -88,6 +89,14 @@ export function AdminChatProvider({ children }) {
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [customerTypingByConv, setCustomerTypingByConv] = useState({});
   const [reportsRefreshTick, setReportsRefreshTick] = useState(0);
+  const [compensationSummary, setCompensationSummary] = useState({
+    pendingCount: 0,
+    urgentPendingCount: 0,
+    unreadDecisionCount: 0,
+    badgeCount: 0,
+    items: [],
+  });
+  const [compensationRefreshTick, setCompensationRefreshTick] = useState(0);
 
   const activeConvIdRef = useRef(activeConvId);
   const activeOwnerKeyRef = useRef(null);
@@ -168,6 +177,12 @@ export function AdminChatProvider({ children }) {
     if (userRoleRef.current !== "ADMIN") return null;
     const data = await adminChatClient.getReportsSummary();
     setReportsSummary(data);
+    return data;
+  }, []);
+
+  const refreshCompensationSummary = useCallback(async () => {
+    const data = await fetchCompensationNegotiationSummary();
+    setCompensationSummary(data);
     return data;
   }, []);
 
@@ -272,6 +287,7 @@ export function AdminChatProvider({ children }) {
         if (userRoleRef.current === "ADMIN") {
           refreshReportsSummary().catch(() => {});
         }
+        refreshCompensationSummary().catch(() => {});
         if (activeConvIdRef.current) {
           socket.emit("conversation:join", { conversationId: activeConvIdRef.current });
         }
@@ -491,6 +507,40 @@ export function AdminChatProvider({ children }) {
       socket.on("internal:delivery-updated", handleInternalReceipt);
       socket.on("internal:read-updated", handleInternalReceipt);
 
+      socket.on("compensation:negotiation-created", (payload) => {
+        refreshCompensationSummary().catch(() => {});
+        setCompensationRefreshTick((t) => t + 1);
+        const neg = payload?.negotiation;
+        if (userRoleRef.current === "ADMIN" && neg) {
+          playHandoffChime();
+          showToastRef.current?.(
+            `${neg.isUrgent ? "[KHẨN] " : ""}${neg.accommodationName || "Cơ sở"} gửi phiếu thương lượng giảm bồi thường ${neg.itemName} (Đơn #${neg.bookingCode}).`,
+            neg.isUrgent ? "warning" : "info",
+          );
+        }
+      });
+
+      socket.on("compensation:negotiation-reviewed", (payload) => {
+        refreshCompensationSummary().catch(() => {});
+        setCompensationRefreshTick((t) => t + 1);
+        const neg = payload?.negotiation;
+        if (userRoleRef.current === "ACCOMMODATION_MANAGER" && neg) {
+          playHandoffChime();
+          const isRejected = neg.status === "REJECTED";
+          showToastRef.current?.(
+            isRejected
+              ? `Admin đã từ chối giảm bồi thường ${neg.itemName} (Đơn #${neg.bookingCode}), giữ nguyên mức ${Number(neg.finalApprovedAmount || 0).toLocaleString("vi-VN")} đ.`
+              : `Admin đã xác nhận giảm ${Number(neg.approvedExtraReduction || 0).toLocaleString("vi-VN")} đ cho ${neg.itemName} (Đơn #${neg.bookingCode}).`,
+            isRejected ? "warning" : "success",
+          );
+        }
+      });
+
+      socket.on("compensation:negotiation-cancelled", () => {
+        refreshCompensationSummary().catch(() => {});
+        setCompensationRefreshTick((t) => t + 1);
+      });
+
       socket.on("access:revoked", () => {
         adminChatClient.disconnectSocket();
         setSocketConnected(false);
@@ -500,6 +550,7 @@ export function AdminChatProvider({ children }) {
       appendConvMessage,
       appendInternalMessage,
       notifyHandoffAlert,
+      refreshCompensationSummary,
       refreshConversations,
       refreshInternalThreads,
       refreshReportsSummary,
@@ -527,6 +578,13 @@ export function AdminChatProvider({ children }) {
           setInternalMessagesById({});
           setHandoffMetadataByConv({});
           setDismissedHandoffKeys([]);
+          setCompensationSummary({
+            pendingCount: 0,
+            urgentPendingCount: 0,
+            unreadDecisionCount: 0,
+            badgeCount: 0,
+            items: [],
+          });
         }
         return;
       }
@@ -538,6 +596,7 @@ export function AdminChatProvider({ children }) {
 
       if (bootedUserIdRef.current === userId && adminChatClient.socket?.connected) {
         refreshConversations().catch(() => {});
+        refreshCompensationSummary().catch(() => {});
         return;
       }
 
@@ -549,6 +608,7 @@ export function AdminChatProvider({ children }) {
         await Promise.all([
           refreshConversations().catch(() => []),
           refreshInternalThreads().catch(() => []),
+          refreshCompensationSummary().catch(() => null),
           me.role === "ADMIN" ? refreshReportsSummary().catch(() => null) : Promise.resolve(null),
         ]);
 
@@ -576,6 +636,7 @@ export function AdminChatProvider({ children }) {
     isCheckingAuthen,
     userId,
     attachSocketListeners,
+    refreshCompensationSummary,
     refreshConversations,
     refreshInternalThreads,
     refreshReportsSummary,
@@ -588,6 +649,7 @@ export function AdminChatProvider({ children }) {
     const syncNow = () => {
       refreshConversations().catch(() => {});
       refreshInternalThreads().catch(() => {});
+      refreshCompensationSummary().catch(() => {});
       if (userRoleRef.current === "ADMIN") {
         refreshReportsSummary().catch(() => {});
       }
@@ -615,6 +677,7 @@ export function AdminChatProvider({ children }) {
     const timer = setInterval(() => {
       if (document.visibilityState === "visible" || !socketConnected) {
         refreshConversations().catch(() => {});
+        refreshCompensationSummary().catch(() => {});
         if (userRoleRef.current === "ADMIN") {
           refreshReportsSummary().catch(() => {});
         }
@@ -626,7 +689,7 @@ export function AdminChatProvider({ children }) {
       document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(timer);
     };
-  }, [userId, socketConnected, attachSocketListeners, refreshConversations, refreshInternalThreads, refreshReportsSummary]);
+  }, [userId, socketConnected, attachSocketListeners, refreshCompensationSummary, refreshConversations, refreshInternalThreads, refreshReportsSummary]);
 
   const waitingConversations = useMemo(
     () =>
@@ -718,6 +781,7 @@ export function AdminChatProvider({ children }) {
   );
 
   const reportsBadge = isAdmin ? Number(reportsSummary?.totalBadgeCount || 0) : 0;
+  const compensationBadgeCount = Number(compensationSummary?.badgeCount || 0);
 
   const value = {
     isAdmin,
@@ -752,6 +816,10 @@ export function AdminChatProvider({ children }) {
     waitingCount,
     internalUnread,
     reportsBadge,
+    compensationSummary,
+    refreshCompensationSummary,
+    compensationRefreshTick,
+    compensationBadgeCount,
   };
 
   return <AdminChatContext.Provider value={value}>{children}</AdminChatContext.Provider>;

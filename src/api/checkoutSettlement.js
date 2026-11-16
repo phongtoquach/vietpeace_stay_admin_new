@@ -39,6 +39,14 @@ export const SETTLEMENT_STATUS_META = {
   SETTLED: { label: 'Đã tất toán đủ', bg: '#DCFCE7', color: '#166534' },
 };
 
+export const NEGOTIATION_STATUS_META = {
+  PENDING: { label: 'Chờ Admin duyệt', bg: '#FEF3C7', color: '#92400E', border: '#FDE68A' },
+  APPROVED: { label: 'Đã duyệt giảm', bg: '#DCFCE7', color: '#166534', border: '#BBF7D0' },
+  PARTIALLY_APPROVED: { label: 'Duyệt điều chỉnh mức giảm', bg: '#E0F2FE', color: '#0369A1', border: '#BAE6FD' },
+  REJECTED: { label: 'Từ chối · Giữ nguyên mức đền', bg: '#FEE2E2', color: '#B91C1C', border: '#FECACA' },
+  CANCELLED: { label: 'Đã hủy đề xuất', bg: '#F3F4F6', color: '#4B5563', border: '#E5E7EB' },
+};
+
 export function getSuggestedDepreciationPercent(
   purchaseYear,
   referenceYear = new Date().getFullYear(),
@@ -139,6 +147,67 @@ export async function createVnpaySettlementUrl(bookingId, payload = {}) {
   const res = await apiFetch(`/bookings/${bookingId}/checkout-settle/vnpay-url`, {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+  return res?.data;
+}
+
+export async function createCompensationNegotiation(bookingId, payload) {
+  const res = await apiFetch(`/bookings/${bookingId}/compensation-negotiations`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res?.data;
+}
+
+export async function fetchCompensationNegotiationSummary() {
+  const res = await apiFetch('/compensation-negotiations/summary');
+  return res?.data || {
+    pendingCount: 0,
+    urgentPendingCount: 0,
+    unreadDecisionCount: 0,
+    badgeCount: 0,
+    items: [],
+  };
+}
+
+export async function fetchCompensationNegotiations(params = {}) {
+  const sp = new URLSearchParams();
+  if (params.status) sp.set('status', params.status);
+  if (params.accommodationId) sp.set('accommodationId', String(params.accommodationId));
+  if (params.bookingId) sp.set('bookingId', String(params.bookingId));
+  if (params.q) sp.set('q', params.q);
+  if (params.page) sp.set('page', String(params.page));
+  if (params.limit) sp.set('limit', String(params.limit));
+  const qs = sp.toString();
+  const res = await apiFetch(`/compensation-negotiations${qs ? `?${qs}` : ''}`);
+  return res?.data || { items: [], counts: {}, pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } };
+}
+
+export async function fetchCompensationNegotiationDetail(negotiationId) {
+  const res = await apiFetch(`/compensation-negotiations/${negotiationId}`);
+  return res?.data;
+}
+
+export async function reviewCompensationNegotiation(negotiationId, payload) {
+  const res = await apiFetch(`/compensation-negotiations/${negotiationId}/review`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return res?.data;
+}
+
+export async function cancelCompensationNegotiation(negotiationId) {
+  const res = await apiFetch(`/compensation-negotiations/${negotiationId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  return res?.data;
+}
+
+export async function acknowledgeCompensationNegotiation(negotiationId) {
+  const res = await apiFetch(`/compensation-negotiations/${negotiationId}/acknowledge`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   });
   return res?.data;
 }
