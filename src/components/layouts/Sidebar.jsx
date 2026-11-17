@@ -11,11 +11,9 @@ import {
   Building2,
   MapPin,
   CircleDollarSign,
-  Tag,
   Users,
   BarChart3,
   ShieldCheck,
-  Settings,
   ChevronDown,
   ChevronRight,
   Hotel,
@@ -52,10 +50,6 @@ export default function Sidebar() {
     isAdmin ||
     hasPermission('pricing.read') ||
     hasPermission('pricing.write');
-  const canViewPromotions =
-    isAdmin ||
-    hasPermission('promotions.read') ||
-    hasPermission('promotions.write');
   const canViewCustomers =
     isAdmin ||
     isManager ||
@@ -99,7 +93,6 @@ export default function Sidebar() {
       currentPath.startsWith('/admin/users') ||
       currentPath.startsWith('/admin/roles') ||
       currentPath.startsWith('/admin/managers'),
-    settings: currentPath.startsWith('/admin/settings'),
   };
 
   const expandedSections = Object.fromEntries(
@@ -328,7 +321,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {(canViewAccommodationsGroup || isAdmin || canViewPricing || canViewPromotions || canViewCustomers) && (
+        {(canViewAccommodationsGroup || isAdmin || canViewPricing || canViewCustomers) && (
           <div className="sidebar-group-title">Quản lý lưu trú</div>
         )}
 
@@ -490,18 +483,6 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Promotions */}
-        {canViewPromotions && (
-          <NavLink
-            to="/admin/promotions"
-            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            onClick={closeMobile}
-          >
-            <Tag size={16} className="sidebar-icon" />
-            <span>Khuyến mãi</span>
-          </NavLink>
-        )}
-
         {/* Customers */}
         {canViewCustomers && (
           <NavLink
@@ -615,42 +596,6 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Settings (Chỉ Super Admin) */}
-        {isAdmin && (
-          <div>
-            <button
-              type="button"
-              className={`sidebar-item-parent ${location.pathname.startsWith('/admin/settings') ? 'active-parent' : ''}`}
-              onClick={() => toggleSection('settings')}
-              aria-expanded={expandedSections.settings}
-            >
-              <div className="sidebar-item-left">
-                <Settings size={16} className="sidebar-icon" />
-                <span>Cài đặt hệ thống</span>
-              </div>
-              {expandedSections.settings ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
-
-            {expandedSections.settings && (
-              <div className="sidebar-submenu">
-                <NavLink
-                  to="/admin/settings/general"
-                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
-                  onClick={closeMobile}
-                >
-                  Cài đặt chung
-                </NavLink>
-                <NavLink
-                  to="/admin/settings/website"
-                  className={({ isActive }) => `sidebar-sublink ${isActive ? 'active' : ''}`}
-                  onClick={closeMobile}
-                >
-                  Cấu hình hiển thị
-                </NavLink>
-              </div>
-            )}
-          </div>
-        )}
       </nav>
     </aside>
   );
