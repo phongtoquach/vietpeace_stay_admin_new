@@ -139,9 +139,24 @@ export default function CheckoutFolioSection({
         setFolio(folioData);
         setCatalog(catalogData?.items || []);
         if (!consumedInitialFlagRef.current) {
-          if (initialOpenSettle && folioData?.permissions?.canSettle) {
-            setSettleModalOpen(true);
+          if (initialOpenSettle) {
             consumedInitialFlagRef.current = true;
+            if (folioData?.permissions?.canSettle) {
+              setSettleModalOpen(true);
+            } else {
+              window.setTimeout(() => {
+                document.getElementById('checkout-folio-panel')?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              }, 80);
+              showToast?.(
+                folioData?.permissions?.hasPendingNegotiation
+                  ? 'Đơn đang có phiếu thương lượng giảm bồi thường chờ Admin duyệt nên chưa thể kết toán.'
+                  : 'Đơn chưa đủ điều kiện mở hộp thoại kết toán.',
+                'info',
+              );
+            }
           } else if (initialOpenInvoice) {
             setInvoiceModalOpen(true);
             consumedInitialFlagRef.current = true;
@@ -198,6 +213,7 @@ export default function CheckoutFolioSection({
 
   const handleQuickAddMinibar = async (item) => {
     const qty = Math.max(1, Number(quickQtyMap[item.id] || 1));
+    const prevActiveCount = (folio?.charges || []).filter((c) => c.status === 'ACTIVE').length;
     setSaving(true);
     try {
       const updated = await addIncidentalCharge(bookingId, {
@@ -207,7 +223,15 @@ export default function CheckoutFolioSection({
       });
       setFolio(updated);
       setQuickQtyMap((prev) => ({ ...prev, [item.id]: 1 }));
-      showToast?.(`Đã thêm ${qty} ${item.unitLabel} ${item.itemName}.`);
+      const updatedActive = (updated?.charges || []).filter((c) => c.status === 'ACTIVE');
+      const mergedRow = updatedActive.find(
+        (c) => Number(c.catalogItemId) === Number(item.id) && !c.note,
+      );
+      if (updatedActive.length === prevActiveCount && mergedRow) {
+        showToast?.(`Đã cộng thêm ${qty} ${item.unitLabel} ${item.itemName} (Tổng SL: ${mergedRow.quantity}).`);
+      } else {
+        showToast?.(`Đã thêm ${qty} ${item.unitLabel} ${item.itemName}.`);
+      }
     } catch (error) {
       showToast?.(error?.message || 'Không thể thêm khoản minibar.', 'error');
     } finally {
@@ -217,6 +241,7 @@ export default function CheckoutFolioSection({
 
   const handleAddCustomMinibar = async (e) => {
     e.preventDefault();
+    const prevActiveCount = (folio?.charges || []).filter((c) => c.status === 'ACTIVE').length;
     setSaving(true);
     try {
       const updated = await addIncidentalCharge(bookingId, {
@@ -228,8 +253,13 @@ export default function CheckoutFolioSection({
         note: customMinibar.note || 'Bổ sung ẩm thực tại phòng',
       });
       setFolio(updated);
+      const updatedActiveCount = (updated?.charges || []).filter((c) => c.status === 'ACTIVE').length;
       setCustomMinibar({ itemName: '', unitLabel: 'Phần', quantity: 1, unitPrice: '', note: '' });
-      showToast?.('Đã thêm mục minibar / đồ ăn ngoài danh mục.');
+      showToast?.(
+        updatedActiveCount === prevActiveCount
+          ? 'Đã cộng dồn số lượng vào mục minibar / đồ ăn tương ứng.'
+          : 'Đã thêm mục minibar / đồ ăn ngoài danh mục.',
+      );
     } catch (error) {
       showToast?.(error?.message || 'Không thể thêm mục minibar.', 'error');
     } finally {
@@ -239,6 +269,7 @@ export default function CheckoutFolioSection({
 
   const handleAddService = async (e) => {
     e.preventDefault();
+    const prevActiveCount = (folio?.charges || []).filter((c) => c.status === 'ACTIVE').length;
     setSaving(true);
     try {
       const updated = await addIncidentalCharge(bookingId, {
@@ -251,8 +282,13 @@ export default function CheckoutFolioSection({
         note: serviceForm.note || undefined,
       });
       setFolio(updated);
+      const updatedActiveCount = (updated?.charges || []).filter((c) => c.status === 'ACTIVE').length;
       setServiceForm({ catalogItemId: '', itemName: '', unitLabel: 'Chuyến', quantity: 1, unitPrice: '', note: '' });
-      showToast?.('Đã ghi nhận dịch vụ bổ sung.');
+      showToast?.(
+        updatedActiveCount === prevActiveCount
+          ? 'Đã cộng dồn số lượng dịch vụ bổ sung.'
+          : 'Đã ghi nhận dịch vụ bổ sung.',
+      );
     } catch (error) {
       showToast?.(error?.message || 'Không thể ghi nhận dịch vụ bổ sung.', 'error');
     } finally {
@@ -336,6 +372,13 @@ export default function CheckoutFolioSection({
 
   const handleAddDamage = async (e) => {
     e.preventDefault();
+    if (exceedsManagerCap) {
+      showToast?.(
+        `Giảm trừ trực tiếp tại quầy vượt quá hạn mức Quản lý (${formatVND(managerDirectCap)}). Hãy giảm về 0đ rồi gửi Phiếu thương lượng lên Admin!`,
+        'error',
+      );
+      return;
+    }
     setSaving(true);
     try {
       const updated = await addIncidentalCharge(bookingId, {
@@ -425,6 +468,14 @@ export default function CheckoutFolioSection({
   const settlementMeta =
     SETTLEMENT_STATUS_META[invoice?.settlementStatus || 'DRAFT'] || SETTLEMENT_STATUS_META.DRAFT;
   const activeCharges = charges.filter((c) => c.status === 'ACTIVE');
+  const chargeCountsByCategory = activeCharges.reduce((acc, ch) => {
+    acc[ch.category] = (acc[ch.category] || 0) + 1;
+    return acc;
+  }, {});
+  const syncedReviewingNegotiation = reviewingNegotiation
+    ? negotiations.find((n) => n.id === reviewingNegotiation.id) || reviewingNegotiation
+    : null;
+  const duePositive = invoice?.settlementStatus !== 'SETTLED' && Number(summary?.settlementDueAmount || 0) > 0;
 
   const handleAckDecision = async (neg) => {
     try {
@@ -533,28 +584,37 @@ export default function CheckoutFolioSection({
             </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: '11px', color: '#6B7280', textTransform: 'uppercase', fontWeight: 600 }}>
+          <div
+            className={`folio-due-card ${
+              hasPendingNegotiation
+                ? 'is-pending'
+                : duePositive
+                  ? 'is-due'
+                  : 'is-clear'
+            }`}
+          >
+            <div style={{ fontSize: '11px', color: '#475569', textTransform: 'uppercase', fontWeight: 700 }}>
               Cần thu khi trả phòng
             </div>
             <div
               className="tabular-nums"
               style={{
-                fontSize: '17px',
+                fontSize: '18px',
                 fontWeight: 800,
-                color:
-                  invoice?.settlementStatus !== 'SETTLED' && Number(summary?.settlementDueAmount || 0) > 0
-                    ? '#B91C1C'
-                    : '#166534',
+                color: duePositive ? '#B91C1C' : '#166534',
                 marginTop: '2px',
               }}
             >
               {formatVND(summary?.settlementDueAmount)}
             </div>
-            <div style={{ fontSize: '11.5px', color: '#166534' }}>
+            <div style={{ fontSize: '11.5px', color: hasPendingNegotiation ? '#92400E' : duePositive ? '#991B1B' : '#166534', fontWeight: 600 }}>
               {invoice?.settlementStatus === 'SETTLED'
                 ? `Đã tất toán (${formatVND(summary?.settlementPaidAmount)})`
-                : 'Sẵn sàng kết toán'}
+                : hasPendingNegotiation
+                  ? `Đang chờ Admin duyệt ${pendingNegotiations.length} phiếu`
+                  : invoice?.settlementStatus === 'PENDING_PAYMENT'
+                    ? 'Đang chờ khách thanh toán VNPay'
+                    : 'Sẵn sàng kết toán'}
             </div>
           </div>
         </div>
@@ -568,16 +628,20 @@ export default function CheckoutFolioSection({
                 { key: 'EXTRA_SERVICE', label: '2. Xe & Dịch vụ thêm', Icon: Car },
                 { key: 'SPECIAL_CLEANING', label: '3. Phí vệ sinh đặc biệt', Icon: Sparkles },
                 { key: 'DAMAGE_COMPENSATION', label: '4. Bồi thường thiết bị', Icon: ShieldAlert },
-              ].map(({ key, label, Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`folio-tab-btn ${activeTab === key ? 'active' : ''}`}
-                  onClick={() => setActiveTab(key)}
-                >
-                  <Icon size={14} /> {label}
-                </button>
-              ))}
+              ].map(({ key, label, Icon }) => {
+                const count = chargeCountsByCategory[key] || 0;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`folio-tab-btn ${activeTab === key ? 'active' : ''}`}
+                    onClick={() => setActiveTab(key)}
+                  >
+                    <Icon size={14} /> <span>{label}</span>
+                    {count > 0 && <span className="folio-tab-count">{count}</span>}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Tab 1: Minibar & F&B */}
@@ -586,11 +650,29 @@ export default function CheckoutFolioSection({
                 <div className="folio-catalog-grid">
                   {minibarCatalog.map((item) => {
                     const qty = quickQtyMap[item.id] || 1;
+                    const inFolioQty = activeCharges.reduce(
+                      (sum, ch) =>
+                        ch.category === 'MINIBAR_FB' && Number(ch.catalogItemId) === Number(item.id)
+                          ? sum + Number(ch.quantity || 0)
+                          : sum,
+                      0,
+                    );
                     return (
                       <div key={item.id} className="folio-quick-card">
                         <div>
-                          <div style={{ fontSize: '13px', fontWeight: 700, color: '#1F2937' }}>{item.itemName}</div>
-                          <div className="tabular-nums" style={{ fontSize: '12px', color: '#0369A1', fontWeight: 600 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#1F2937' }}>{item.itemName}</div>
+                            {inFolioQty > 0 && (
+                              <span
+                                className="badge badge-info tabular-nums"
+                                style={{ fontSize: '10.5px', padding: '1px 7px', flexShrink: 0 }}
+                                title="Tổng số lượng đang ghi nhận trong bảng kê"
+                              >
+                                Đã ghi: {inFolioQty}
+                              </span>
+                            )}
+                          </div>
+                          <div className="tabular-nums" style={{ fontSize: '12px', color: '#0369A1', fontWeight: 600, marginTop: '2px' }}>
                             {formatVND(item.unitPrice)} / {item.unitLabel}
                           </div>
                         </div>
@@ -686,8 +768,9 @@ export default function CheckoutFolioSection({
                     <input
                       id="mb-custom-price"
                       type="number"
+                      inputMode="numeric"
                       min={0}
-                      step={1000}
+                      step={1}
                       required
                       className="filter-input tabular-nums"
                       style={{ width: '100%' }}
@@ -789,8 +872,9 @@ export default function CheckoutFolioSection({
                     <input
                       id="svc-price"
                       type="number"
+                      inputMode="numeric"
                       min={0}
-                      step={1000}
+                      step={1}
                       required
                       className="filter-input tabular-nums"
                       style={{ width: '100%' }}
@@ -902,14 +986,20 @@ export default function CheckoutFolioSection({
                         <input
                           id="cln-price"
                           type="number"
-                          min={10000}
-                          step={10000}
+                          inputMode="numeric"
+                          min={1000}
+                          step={1}
                           required
                           className="filter-input tabular-nums"
                           style={{ width: '100%' }}
                           value={cleaningForm.unitPrice}
                           onChange={(e) => setCleaningForm((p) => ({ ...p, unitPrice: e.target.value }))}
                         />
+                        {Number(cleaningForm.unitPrice || 0) > 0 && (
+                          <div className="tabular-nums" style={{ fontSize: '11px', color: '#0369A1', marginTop: '2px', fontWeight: 600 }}>
+                            = {formatVND(Number(cleaningForm.unitPrice || 0))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1059,7 +1149,7 @@ export default function CheckoutFolioSection({
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.8fr 1fr 1.2fr', gap: '8px', alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.8fr 1fr 1.2fr', gap: '8px', alignItems: 'start' }}>
                   <div>
                     <label htmlFor="dmg-price" className="filter-label" style={{ display: 'block', marginBottom: '3px' }}>
                       {damageForm.compensationMode === 'REPAIR' ? 'Chi phí sửa chữa (VNĐ) *' : 'Giá niêm yết thay mới (VNĐ) *'}
@@ -1067,14 +1157,20 @@ export default function CheckoutFolioSection({
                     <input
                       id="dmg-price"
                       type="number"
+                      inputMode="numeric"
                       min={0}
-                      step={10000}
+                      step={1}
                       required
                       className="filter-input tabular-nums"
                       style={{ width: '100%' }}
                       value={damageForm.unitPrice}
                       onChange={(e) => setDamageForm((p) => ({ ...p, unitPrice: e.target.value }))}
                     />
+                    {Number(damageForm.unitPrice || 0) > 0 && (
+                      <div className="tabular-nums" style={{ fontSize: '11px', color: '#0369A1', marginTop: '2px', fontWeight: 600 }}>
+                        = {formatVND(Number(damageForm.unitPrice || 0))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="dmg-dep" className="filter-label" style={{ display: 'block', marginBottom: '3px' }}>
@@ -1099,8 +1195,9 @@ export default function CheckoutFolioSection({
                     <input
                       id="dmg-adj"
                       type="number"
+                      inputMode="numeric"
                       min={0}
-                      step={10000}
+                      step={1}
                       aria-invalid={exceedsManagerCap ? 'true' : undefined}
                       className="filter-input tabular-nums"
                       style={{
@@ -1110,13 +1207,18 @@ export default function CheckoutFolioSection({
                       value={damageForm.adjustmentAmount}
                       onChange={(e) => setDamageForm((p) => ({ ...p, adjustmentAmount: e.target.value }))}
                     />
+                    {Number(damageForm.adjustmentAmount || 0) > 0 && !exceedsManagerCap && (
+                      <div className="tabular-nums" style={{ fontSize: '11px', color: '#0369A1', marginTop: '2px', fontWeight: 600 }}>
+                        Giảm: -{formatVND(Number(damageForm.adjustmentAmount || 0))}
+                      </div>
+                    )}
                     {exceedsManagerCap && (
                       <div style={{ fontSize: '11px', color: '#B91C1C', marginTop: '3px' }}>
                         Vượt hạn mức Quản lý ({formatVND(managerDirectCap)}). Hãy giảm về 0đ rồi gửi Phiếu thương lượng lên Admin!
                       </div>
                     )}
                   </div>
-                  <div style={{ padding: '7px 10px', borderRadius: '8px', backgroundColor: '#FEE2E2', color: '#991B1B', fontSize: '12.5px' }}>
+                  <div style={{ padding: '7px 10px', borderRadius: '8px', backgroundColor: '#FEE2E2', color: '#991B1B', fontSize: '12.5px', marginTop: '20px' }}>
                     Tạm tính bồi thường: <strong className="tabular-nums">{formatVND(damagePreviewAmount)}</strong>
                   </div>
                 </div>
@@ -1274,7 +1376,7 @@ export default function CheckoutFolioSection({
         {/* Itemized Charges Table */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-            <h3 style={{ margin: 0, fontSize: '13.5px', fontWeight: 700, color: '#292D32' }}>
+            <h3 id="folio-charges-heading" style={{ margin: 0, fontSize: '13.5px', fontWeight: 700, color: '#292D32' }}>
               Danh sách các khoản phát sinh đã ghi nhận
             </h3>
             <label htmlFor="toggle-voided-charges" style={{ fontSize: '12px', color: '#6B7280', display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
@@ -1288,8 +1390,13 @@ export default function CheckoutFolioSection({
             </label>
           </div>
 
-          <div className="admin-table-wrap">
-            <table className="admin-table">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-labelledby="folio-charges-heading"
+            className="table-responsive"
+          >
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Nhóm &amp; Hạng mục</th>
@@ -1654,12 +1761,12 @@ export default function CheckoutFolioSection({
       )}
 
       {/* Admin Review / Negotiation Detail Dialog */}
-      {reviewingNegotiation && (
+      {syncedReviewingNegotiation && (
         <CompensationReviewDialog
-          key={reviewingNegotiation.id}
-          isOpen={Boolean(reviewingNegotiation)}
+          key={`${syncedReviewingNegotiation.id}-${syncedReviewingNegotiation.status}-${syncedReviewingNegotiation.updatedAt || ''}`}
+          isOpen={Boolean(syncedReviewingNegotiation)}
           onClose={() => setReviewingNegotiation(null)}
-          negotiation={reviewingNegotiation}
+          negotiation={syncedReviewingNegotiation}
           isAdmin={isAdmin}
           canWriteBookings={canWriteBookings}
           showToast={showToast}

@@ -1071,6 +1071,44 @@
     margin-bottom: 16px;
 }
 
+.fin-chart-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.fin-pnl-hover-strip {
+    display: flex;
+    align-items: safe center;
+    gap: 14px;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: 1px solid #E2E8F0;
+    background: #F8FAFC;
+    color: #64748B;
+    font-size: 12px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.fin-pnl-hover-strip::-webkit-scrollbar {
+    display: none;
+}
+
+.fin-pnl-hover-strip.is-active {
+    background: #0F172A;
+    border-color: #0F172A;
+    color: #F8FAFC;
+}
+
 @media (max-width: 1024px) {
     .fin-chart-split {
         grid-template-columns: 1fr;
@@ -1374,6 +1412,42 @@ dialog.admin-native-dialog::backdrop {
     text-decoration: underline;
 }
 
+.visually-hidden {
+    position: absolute;
+    clip-path: inset(50%);
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    white-space: nowrap;
+}
+
+.booking-detail-summary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+    gap: 16px;
+}
+
+.booking-stay-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+@media (max-width: 960px) {
+    .booking-detail-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .booking-stay-info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* ============================================================================
    Checkout Folio, Asset Compensation & Printable Invoice (A4 & K80)
    ============================================================================ */
@@ -1408,6 +1482,48 @@ dialog.admin-native-dialog::backdrop {
     background: #292D32;
     color: #FFFFFF;
     border-color: #292D32;
+}
+
+.folio-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #F3F4F6;
+    color: #1F2937;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.folio-tab-btn.active .folio-tab-count {
+    background: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF;
+}
+
+.folio-due-card {
+    border-radius: 8px;
+    padding: 8px 12px;
+    border: 1px solid #E2E8F0;
+    background: #FFFFFF;
+}
+
+.folio-due-card.is-due {
+    border-color: #FECACA;
+    background: #FEF2F2;
+}
+
+.folio-due-card.is-pending {
+    border-color: #FDE68A;
+    background: #FFFBEB;
+}
+
+.folio-due-card.is-clear {
+    border-color: #BBF7D0;
+    background: #F0FDF4;
 }
 
 .folio-catalog-grid {

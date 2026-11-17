@@ -19,6 +19,9 @@ export default function CompensationNegotiationDialog({
   showToast,
 }) {
   const dialogRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const reductionInputRef = useRef(null);
+  const opinionInputRef = useRef(null);
 
   const grossAmount = useMemo(() => {
     if (!charge) return 0;
@@ -39,6 +42,9 @@ export default function CompensationNegotiationDialog({
   }, [currentPayable]);
 
   const [requestedExtraReduction, setRequestedExtraReduction] = useState(defaultReduction);
+  const [proposedFinalInput, setProposedFinalInput] = useState(() =>
+    defaultReduction !== '' ? String(Math.max(0, currentPayable - Number(defaultReduction))) : '',
+  );
   const [guestOpinion, setGuestOpinion] = useState('');
   const [managerNote, setManagerNote] = useState('');
   const [evidenceImages, setEvidenceImages] = useState(() =>
@@ -50,6 +56,7 @@ export default function CompensationNegotiationDialog({
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -66,16 +73,50 @@ export default function CompensationNegotiationDialog({
 
   if (!charge) return null;
 
-  const reductionNum = Math.max(0, Math.round(Number(requestedExtraReduction || 0)));
+  const parsedReduction = requestedExtraReduction === '' ? NaN : Math.round(Number(requestedExtraReduction));
+  const reductionNum = Number.isFinite(parsedReduction) ? Math.max(0, parsedReduction) : 0;
   const proposedFinalNum = Math.max(0, currentPayable - reductionNum);
+  const reductionPct = currentPayable > 0 && reductionNum > 0 ? Math.round((reductionNum / currentPayable) * 100) : 0;
+  const isReductionOverLimit = Number.isFinite(parsedReduction) && parsedReduction > currentPayable;
+
+  const handleReductionChange = (rawVal) => {
+    setRequestedExtraReduction(rawVal);
+    if (errorMsg || fieldErrors.reduction) {
+      setErrorMsg('');
+      setFieldErrors((prev) => ({ ...prev, reduction: false }));
+    }
+    if (rawVal === '') {
+      setProposedFinalInput('');
+      return;
+    }
+    const num = Math.round(Number(rawVal));
+    if (Number.isFinite(num)) {
+      setProposedFinalInput(String(Math.max(0, currentPayable - Math.max(0, num))));
+    }
+  };
 
   const handleProposedFinalChange = (rawVal) => {
+    setProposedFinalInput(rawVal);
+    if (errorMsg || fieldErrors.reduction) {
+      setErrorMsg('');
+      setFieldErrors((prev) => ({ ...prev, reduction: false }));
+    }
     if (rawVal === '') {
       setRequestedExtraReduction('');
       return;
     }
-    const desiredFinal = Math.max(0, Math.min(currentPayable, Math.round(Number(rawVal || 0))));
-    setRequestedExtraReduction(String(Math.max(0, currentPayable - desiredFinal)));
+    const num = Math.round(Number(rawVal));
+    if (Number.isFinite(num)) {
+      setRequestedExtraReduction(String(currentPayable - Math.max(0, num)));
+    }
+  };
+
+  const applySuggestedReduction = (amount) => {
+    const safeVal = Math.max(1, Math.min(currentPayable, Math.round(amount)));
+    setRequestedExtraReduction(String(safeVal));
+    setProposedFinalInput(String(Math.max(0, currentPayable - safeVal)));
+    setErrorMsg('');
+    setFieldErrors((prev) => ({ ...prev, reduction: false }));
   };
 
   const handleUploadFiles = async (fileList) => {
@@ -118,25 +159,32 @@ export default function CompensationNegotiationDialog({
     e.preventDefault();
     setErrorMsg('');
 
-    if (!Number.isFinite(reductionNum) || reductionNum <= 0) {
+    if (!Number.isFinite(parsedReduction) || parsedReduction <= 0) {
+      setFieldErrors({ reduction: true });
       setErrorMsg('Số tiền xin giảm thêm phải lớn hơn 0 đ.');
+      reductionInputRef.current?.focus();
       return;
     }
-    if (reductionNum > currentPayable) {
-      setErrorMsg(`Số tiền xin giảm không được vượt quá mức đang yêu cầu đền (${formatVND(currentPayable)}).`);
+    if (parsedReduction > currentPayable) {
+      setFieldErrors({ reduction: true });
+      setErrorMsg(`Số tiền xin giảm (${formatVND(parsedReduction)}) không được vượt quá mức đang yêu cầu đền (${formatVND(currentPayable)}).`);
+      reductionInputRef.current?.focus();
       return;
     }
     const trimmedOpinion = guestOpinion.trim();
     if (trimmedOpinion.length < 5) {
+      setFieldErrors({ opinion: true });
       setErrorMsg('Vui lòng ghi rõ ý kiến / lý do xin giảm của khách hàng (tối thiểu 5 ký tự).');
+      opinionInputRef.current?.focus();
       return;
     }
 
+    setFieldErrors({});
     setSubmitting(true);
     try {
       const result = await createCompensationNegotiation(bookingId, {
         chargeId: charge.id,
-        requestedExtraReduction: reductionNum,
+        requestedExtraReduction: parsedReduction,
         guestOpinion: trimmedOpinion,
         managerNote: managerNote.trim() || undefined,
         evidenceImages,
@@ -188,7 +236,7 @@ export default function CompensationNegotiationDialog({
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+      <form noValidate onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
         <div className="fin-dialog-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {errorMsg && (
             <div
@@ -248,26 +296,45 @@ export default function CompensationNegotiationDialog({
           </div>
 
           {/* 2-way synced reduction & proposed final */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
             <div>
               <label htmlFor="neg-extra-reduction" className="filter-label" style={{ display: 'block', marginBottom: '4px' }}>
                 Số tiền xin giảm thêm (VNĐ) *
               </label>
               <input
+                ref={reductionInputRef}
                 id="neg-extra-reduction"
                 name="requestedExtraReduction"
                 type="number"
                 inputMode="numeric"
                 min={1}
                 max={currentPayable}
-                step={10000}
+                step={1}
                 required
                 autoFocus
+                aria-invalid={fieldErrors.reduction || isReductionOverLimit ? 'true' : undefined}
+                aria-describedby="neg-extra-reduction-hint"
                 className="filter-input tabular-nums"
                 style={{ width: '100%', fontWeight: 700 }}
                 value={requestedExtraReduction}
-                onChange={(e) => setRequestedExtraReduction(e.target.value)}
+                onChange={(e) => handleReductionChange(e.target.value)}
               />
+              <div
+                id="neg-extra-reduction-hint"
+                className="tabular-nums"
+                style={{
+                  fontSize: '11.5px',
+                  marginTop: '4px',
+                  color: isReductionOverLimit ? '#B91C1C' : '#0369A1',
+                  fontWeight: 600,
+                }}
+              >
+                {isReductionOverLimit
+                  ? `Vượt quá mức tối đa ${formatVND(currentPayable)}`
+                  : reductionNum > 0
+                    ? `= ${formatVND(reductionNum)} (giảm ~${reductionPct}%)`
+                    : `Tối đa ${formatVND(currentPayable)}`}
+              </div>
             </div>
 
             <div>
@@ -280,54 +347,95 @@ export default function CompensationNegotiationDialog({
                 type="number"
                 inputMode="numeric"
                 min={0}
-                max={currentPayable - 1}
-                step={10000}
+                max={Math.max(0, currentPayable - 1)}
+                step={1}
+                aria-describedby="neg-proposed-final-hint"
                 className="filter-input tabular-nums"
                 style={{ width: '100%', fontWeight: 700, color: '#166534' }}
-                value={requestedExtraReduction === '' ? '' : proposedFinalNum}
+                value={proposedFinalInput}
                 onChange={(e) => handleProposedFinalChange(e.target.value)}
               />
+              <div
+                id="neg-proposed-final-hint"
+                className="tabular-nums"
+                style={{ fontSize: '11.5px', marginTop: '4px', color: '#15803D', fontWeight: 600 }}
+              >
+                {proposedFinalInput !== ''
+                  ? `= ${formatVND(proposedFinalNum)} khách đóng cuối cùng`
+                  : 'Nhập số tiền khách sẵn sàng thanh toán'}
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11.5px', color: '#6B7280' }}>Gợi ý nhanh mức xin giảm:</span>
-            {[0.15, 0.25, 0.35, 0.5].map((ratio) => {
-              const suggested = Math.max(
-                10000,
-                Math.min(currentPayable, Math.round((currentPayable * ratio) / 10000) * 10000),
-              );
-              return (
-                <button
-                  key={ratio}
-                  type="button"
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => setRequestedExtraReduction(String(suggested))}
-                >
-                  -{Math.round(ratio * 100)}% ({formatVND(suggested)})
-                </button>
-              );
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '11.5px', color: '#6B7280', fontWeight: 600 }}>
+              Gợi ý nhanh mức xin giảm:
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '6px' }}>
+              {[0.15, 0.25, 0.35, 0.5].map((ratio) => {
+                const suggested = Math.max(
+                  10000,
+                  Math.min(currentPayable, Math.round((currentPayable * ratio) / 10000) * 10000),
+                );
+                const isSelected = reductionNum === suggested;
+                return (
+                  <button
+                    key={ratio}
+                    type="button"
+                    aria-pressed={isSelected}
+                    className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '1px',
+                      padding: '6px 8px',
+                      lineHeight: 1.25,
+                      whiteSpace: 'nowrap',
+                    }}
+                    onClick={() => applySuggestedReduction(suggested)}
+                  >
+                    <span style={{ fontWeight: 700 }}>-{Math.round(ratio * 100)}%</span>
+                    <span className="tabular-nums" style={{ fontSize: '11px', opacity: 0.9 }}>
+                      {formatVND(suggested)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Guest Opinion */}
           <div>
-            <label htmlFor="neg-guest-opinion" className="filter-label" style={{ display: 'block', marginBottom: '4px' }}>
-              Ý kiến &amp; lý do xin giảm của khách hàng *
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+              <label htmlFor="neg-guest-opinion" className="filter-label" style={{ margin: 0 }}>
+                Ý kiến &amp; lý do xin giảm của khách hàng *
+              </label>
+              <span className="tabular-nums" style={{ fontSize: '11px', color: '#64748B' }}>
+                {guestOpinion.trim().length}/1000 (tối thiểu 5 ký tự)
+              </span>
+            </div>
             <textarea
+              ref={opinionInputRef}
               id="neg-guest-opinion"
               name="guestOpinion"
               rows={3}
               required
               minLength={5}
               maxLength={1000}
+              aria-invalid={fieldErrors.opinion ? 'true' : undefined}
               aria-describedby="neg-guest-opinion-hint"
               className="filter-input"
               style={{ width: '100%', resize: 'vertical' }}
               placeholder="VD: Khách trình bày khi dọn bàn vô tình làm nứt góc dưới TV, màn hình vẫn hiển thị và dùng bình thường, khách xin giảm còn 3.500.000đ..."
               value={guestOpinion}
-              onChange={(e) => setGuestOpinion(e.target.value)}
+              onChange={(e) => {
+                setGuestOpinion(e.target.value);
+                if (fieldErrors.opinion || errorMsg) {
+                  setFieldErrors((prev) => ({ ...prev, opinion: false }));
+                  setErrorMsg('');
+                }
+              }}
             />
             <div id="neg-guest-opinion-hint" style={{ fontSize: '11px', color: '#6B7280', marginTop: '3px' }}>
               Ghi nhận trung thực giải trình và thiện chí của khách để Admin cân nhắc mức giảm.
@@ -336,9 +444,14 @@ export default function CompensationNegotiationDialog({
 
           {/* Manager Assessment */}
           <div>
-            <label htmlFor="neg-manager-note" className="filter-label" style={{ display: 'block', marginBottom: '4px' }}>
-              Đánh giá thực tế &amp; đề xuất của Manager cơ sở
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+              <label htmlFor="neg-manager-note" className="filter-label" style={{ margin: 0 }}>
+                Đánh giá thực tế &amp; đề xuất của Manager cơ sở
+              </label>
+              <span className="tabular-nums" style={{ fontSize: '11px', color: '#64748B' }}>
+                {managerNote.trim().length}/1000
+              </span>
+            </div>
             <textarea
               id="neg-manager-note"
               name="managerNote"
@@ -355,29 +468,33 @@ export default function CompensationNegotiationDialog({
           {/* Multi-Image Evidence Upload */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label htmlFor="neg-evidence-upload" className="filter-label" style={{ margin: 0 }}>
+              <span className="filter-label" style={{ margin: 0 }}>
                 Hình ảnh hư hao thực tế gửi Admin ({evidenceImages.length}/{MAX_IMAGES})
-              </label>
-              <label
-                htmlFor="neg-evidence-upload"
+              </span>
+              <button
+                type="button"
                 className="btn btn-sm btn-secondary"
-                style={{ cursor: uploading || evidenceImages.length >= MAX_IMAGES ? 'not-allowed' : 'pointer', margin: 0 }}
+                disabled={uploading || submitting || evidenceImages.length >= MAX_IMAGES}
+                onClick={() => fileInputRef.current?.click()}
               >
                 <Upload size={13} /> {uploading ? 'Đang tải ảnh...' : 'Tải ảnh hư hỏng lên'}
-                <input
-                  id="neg-evidence-upload"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  disabled={uploading || submitting || evidenceImages.length >= MAX_IMAGES}
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const files = e.target.files;
-                    handleUploadFiles(files);
-                    e.target.value = '';
-                  }}
-                />
-              </label>
+              </button>
+              <input
+                ref={fileInputRef}
+                id="neg-evidence-upload"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                tabIndex={-1}
+                aria-hidden="true"
+                disabled={uploading || submitting || evidenceImages.length >= MAX_IMAGES}
+                className="visually-hidden"
+                onChange={(e) => {
+                  const files = e.target.files;
+                  handleUploadFiles(files);
+                  e.target.value = '';
+                }}
+              />
             </div>
 
             {evidenceImages.length === 0 ? (

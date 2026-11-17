@@ -544,8 +544,24 @@ export default function RolesPermissionsPage() {
                           <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '13.5px' }}>
                             {item.name}
                           </div>
-                          <div style={{ fontSize: '12px', color: '#64748b' }}>
-                            Mã: <code style={{ color: '#1e6091', fontWeight: 600 }}>{item.code}</code> | {item.typeName}
+                          <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                            <span>Mã: <code style={{ color: '#1e6091', fontWeight: 600 }}>{item.code}</code> | {item.typeName}</span>
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                backgroundColor: Number(item.status) === 1 && hasManager && Number(item.manager?.status ?? 1) === 1 ? '#DCFCE7' : '#FEE2E2',
+                                color: Number(item.status) === 1 && hasManager && Number(item.manager?.status ?? 1) === 1 ? '#166534' : '#B91C1C',
+                              }}
+                            >
+                              {Number(item.status) === 1 && hasManager && Number(item.manager?.status ?? 1) === 1
+                                ? 'Đang hoạt động (Hiện trên web)'
+                                : Number(item.status) === 0
+                                  ? 'Bản nháp (Ẩn trên web)'
+                                  : 'Ngừng hoạt động (Ẩn trên web)'}
+                            </span>
                           </div>
                         </div>
                       </div>

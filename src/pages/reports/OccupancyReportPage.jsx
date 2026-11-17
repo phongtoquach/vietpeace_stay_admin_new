@@ -17,12 +17,8 @@ import {
 } from '../../components/reports/reportPeriod.js';
 import { reportsApi } from '../../api/reports.js';
 import { formatVND } from '../../data/mockData.js';
-import { Download, BedDouble, Moon, Percent, Coins, TrendingUp } from 'lucide-react';
-
-function csvCell(value) {
-  const text = String(value ?? '');
-  return `"${text.replace(/"/g, '""')}"`;
-}
+import { downloadCsv, downloadExcelWorkbook } from '../../utils/reportExport.js';
+import { Download, FileSpreadsheet, BedDouble, Moon, Percent, Coins, TrendingUp } from 'lucide-react';
 
 export default function OccupancyReportPage() {
   const { currentLoggedInUser } = useAuth();
@@ -111,6 +107,55 @@ export default function OccupancyReportPage() {
   const propertyDetailQuery = buildReportPeriodQuery(year, month);
   const periodTotals = month !== null ? (data?.monthTotals || totals) : totals;
 
+  const buildExportBaseName = () => (
+    month !== null
+      ? `vietpeace_bao_cao_cong_suat_${year}-${String(month).padStart(2, '0')}`
+      : `vietpeace_bao_cao_cong_suat_${year}`
+  );
+
+  const handleExportExcel = () => {
+    if (!data) return;
+    const periodText = month !== null ? `Tháng ${month}/${year}` : `Cả năm ${year}`;
+    const exportedAtText = new Date().toLocaleString('vi-VN');
+    const summaryRow = {
+      name: `TRUNG BÌNH / TỔNG (${data.properties.length} cơ sở)`,
+      rooms: periodTotals.totalRooms || 0,
+      roomNights: periodTotals.roomNights || 0,
+      occupancy: periodTotals.occupancy || 0,
+      adr: periodTotals.adr || 0,
+      revpar: periodTotals.revpar || 0,
+    };
+
+    downloadExcelWorkbook(`${buildExportBaseName()}.xlsx`, [
+      {
+        name: 'Theo co so',
+        title: 'BÁO CÁO CÔNG SUẤT PHÒNG THEO CƠ SỞ',
+        subtitle: `Kỳ báo cáo: ${periodText} · Xuất lúc: ${exportedAtText}`,
+        columns: [
+          { header: 'Cơ sở lưu trú', key: 'name', type: 'text', minWidth: 28 },
+          { header: 'Tổng phòng', key: 'rooms', type: 'integer', minWidth: 13 },
+          { header: 'Room-nights', key: 'roomNights', type: 'integer', minWidth: 15 },
+          { header: 'Công suất (%)', key: 'occupancy', type: 'percent', minWidth: 15 },
+          { header: 'ADR (VNĐ)', key: 'adr', type: 'currency', minWidth: 16 },
+          { header: 'RevPAR (VNĐ)', key: 'revpar', type: 'currency', minWidth: 16 },
+        ],
+        rows: data.properties,
+        summaryRow,
+      },
+      {
+        name: 'Theo thang',
+        title: 'CÔNG SUẤT PHÒNG THEO THÁNG',
+        subtitle: `Kỳ báo cáo: ${periodText} · Xuất lúc: ${exportedAtText}`,
+        columns: [
+          { header: 'Tháng', value: (entry) => `Tháng ${entry.month}`, type: 'text', align: 'center', minWidth: 16 },
+          { header: 'Công suất (%)', key: 'occupancy', type: 'percent', minWidth: 16 },
+        ],
+        rows: data.monthly,
+      },
+    ]);
+    showToast(`Đã xuất file Excel (.xlsx) báo cáo công suất ${periodLabel}.`);
+  };
+
   const handleExportCSV = () => {
     if (!data) return;
 
@@ -133,17 +178,8 @@ export default function OccupancyReportPage() {
         property.revpar,
       ]),
     ];
-    const content = rows.map((row) => row.map(csvCell).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = month !== null
-      ? `vietpeace_bao_cao_cong_suat_${year}-${String(month).padStart(2, '0')}.csv`
-      : `vietpeace_bao_cao_cong_suat_${year}.csv`;
-    anchor.click();
-    window.URL.revokeObjectURL(url);
-    showToast(`Đã xuất báo cáo công suất ${month !== null ? `tháng ${month}/${year}` : `năm ${year}`}.`);
+    downloadCsv(`${buildExportBaseName()}.csv`, rows);
+    showToast(`Đã xuất báo cáo CSV công suất ${periodLabel}.`);
   };
 
   return (
@@ -161,11 +197,19 @@ export default function OccupancyReportPage() {
             <ReportMonthSelect month={month} onChange={handleMonthChange} />
             <button
               type="button"
-              onClick={handleExportCSV}
+              onClick={handleExportExcel}
               className="btn btn-primary"
               disabled={!data || loading}
             >
-              <Download size={14} /> Xuất báo cáo CSV
+              <FileSpreadsheet size={14} /> Xuất Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="btn btn-secondary"
+              disabled={!data || loading}
+            >
+              <Download size={14} /> CSV
             </button>
           </div>
         }

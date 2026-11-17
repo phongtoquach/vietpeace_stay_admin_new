@@ -484,6 +484,7 @@ export default function BookingListPage() {
       render: (row) => {
         const incidental = Number(row.settlement?.incidentalGrandTotal || 0);
         const sStatus = row.settlement?.settlementStatus;
+        const pendingNeg = Number(row.settlement?.pendingNegotiationsCount || 0);
 
         let stayBadge;
         if (row.checked_out_at) {
@@ -503,8 +504,30 @@ export default function BookingListPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
             {stayBadge}
             {(incidental > 0 || sStatus === 'PENDING_PAYMENT') && (
-              <span style={{ fontSize: '11px', fontWeight: 600, color: sStatus === 'SETTLED' ? '#166534' : '#B45309' }}>
-                {sStatus === 'SETTLED' ? 'Đã tất toán' : sStatus === 'PENDING_PAYMENT' ? 'Chờ VNPay' : 'Phát sinh'}: {formatVND(incidental)}
+              <span
+                className="tabular-nums"
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: sStatus === 'SETTLED' ? '#166534' : sStatus === 'PENDING_PAYMENT' ? '#0369A1' : '#B45309',
+                }}
+              >
+                {sStatus === 'SETTLED' ? 'Đã tất toán' : sStatus === 'PENDING_PAYMENT' ? 'Chờ VNPay' : 'Phát sinh cần thu'}: {formatVND(incidental)}
+              </span>
+            )}
+            {pendingNeg > 0 && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 7px',
+                  borderRadius: '999px',
+                  backgroundColor: '#FFFBEB',
+                  color: '#92400E',
+                  border: '1px solid #FDE68A',
+                }}
+              >
+                Chờ Admin duyệt giảm giá ({pendingNeg})
               </span>
             )}
           </div>

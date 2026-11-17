@@ -337,8 +337,14 @@ export default function IncidentalCatalogPage() {
 
       {/* Table */}
       <div className="admin-card">
-        <div className="admin-table-wrap">
-          <table className="admin-table">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Danh mục tiện ích, minibar và tài sản phòng"
+          className="table-responsive"
+          style={{ border: 'none' }}
+        >
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Mã nội bộ</th>

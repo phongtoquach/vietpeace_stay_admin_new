@@ -36,11 +36,11 @@ export default function FinancialPnlChart({
   );
 
   const svgWidth = Math.max(540, seriesToRender.length * 64 + 64);
-  const svgHeight = 250;
+  const svgHeight = 275;
   const padLeft = 58;
   const padRight = 16;
-  const padTop = 20;
-  const padBottom = 32;
+  const padTop = 18;
+  const padBottom = 30;
   const chartW = svgWidth - padLeft - padRight;
   const chartH = svgHeight - padTop - padBottom;
   const stepW = seriesToRender.length > 0 ? chartW / seriesToRender.length : chartW;
@@ -58,7 +58,7 @@ export default function FinancialPnlChart({
   return (
     <div className="fin-chart-split">
       {/* Left: Grouped Monthly Revenue / OPEX / Profit Bar Chart */}
-      <div className="admin-card" style={{ marginBottom: 0 }}>
+      <div className="admin-card fin-chart-card">
         <div className="admin-card-header" style={{ flexWrap: 'wrap', gap: '8px' }}>
           <div>
             <div className="admin-card-title">Biểu đồ đối sánh Thu – Chi – Lợi nhuận Sau Thuế</div>
@@ -82,40 +82,41 @@ export default function FinancialPnlChart({
           </div>
         </div>
 
-        <div className="admin-card-body" style={{ position: 'relative' }}>
-          {hovered && (
-            <div
-              style={{
-                background: '#0F172A',
-                color: '#F8FAFC',
-                padding: '8px 12px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                marginBottom: '10px',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '14px',
-                alignItems: 'center',
-              }}
-            >
-              <strong>{hovered.label}:</strong>
-              <span>Thu ròng: <strong style={{ color: '#38BDF8' }}>{formatVND(hovered.totalRevenue)}</strong></span>
-              <span>Chi OPEX: <strong style={{ color: '#FBBF24' }}>{formatVND(hovered.totalExpenses)}</strong></span>
+        <div className="admin-card-body" style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1 }}>
+          <div
+            className={`fin-pnl-hover-strip tabular-nums ${hovered ? 'is-active' : ''}`}
+            aria-live="polite"
+          >
+            {hovered ? (
+              <>
+                <strong>{hovered.label}:</strong>
+                <span>
+                  Thu ròng: <strong style={{ color: '#38BDF8' }}>{formatVND(hovered.totalRevenue)}</strong>
+                </span>
+                <span>
+                  Chi OPEX: <strong style={{ color: '#FBBF24' }}>{formatVND(hovered.totalExpenses)}</strong>
+                </span>
+                <span>
+                  LN Sau Thuế:{' '}
+                  <strong style={{ color: hovered.netProfitAfterTax < 0 ? '#FCA5A5' : '#4ADE80' }}>
+                    {formatVND(hovered.netProfitAfterTax)}
+                  </strong>
+                </span>
+              </>
+            ) : (
               <span>
-                LN Sau Thuế:{' '}
-                <strong style={{ color: hovered.netProfitAfterTax < 0 ? '#FCA5A5' : '#4ADE80' }}>
-                  {formatVND(hovered.netProfitAfterTax)}
-                </strong>
+                Rê chuột vào từng cột tháng bên dưới để xem chi tiết Thu ròng · Chi OPEX · Lợi nhuận Sau Thuế
               </span>
-            </div>
-          )}
+            )}
+          </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto', flex: 1, display: 'flex', alignItems: 'center' }}>
             <svg
               viewBox={`0 0 ${svgWidth} ${svgHeight}`}
               style={{ width: '100%', minWidth: '520px', height: 'auto', display: 'block' }}
               role="img"
               aria-label={`Biểu đồ đối sánh Thu Chi Lợi nhuận ${periodLabel}`}
+              onMouseLeave={() => setHoveredMonth(null)}
             >
               {ticks.map((t, idx) => (
                 <g key={idx}>
@@ -150,20 +151,21 @@ export default function FinancialPnlChart({
                 return (
                   <g
                     key={item.month}
+                    tabIndex={0}
+                    aria-label={`${item.label}: Thu ròng ${formatVND(item.totalRevenue)}, Chi OPEX ${formatVND(item.totalExpenses)}, Lợi nhuận sau thuế ${formatVND(item.netProfitAfterTax)}`}
                     onMouseEnter={() => setHoveredMonth(item.month)}
-                    onMouseLeave={() => setHoveredMonth(null)}
-                    style={{ cursor: 'pointer' }}
+                    onFocus={() => setHoveredMonth(item.month)}
+                    onBlur={() => setHoveredMonth(null)}
+                    style={{ cursor: 'pointer', outline: 'none' }}
                   >
-                    {isActive && (
-                      <rect
-                        x={padLeft + idx * stepW + 2}
-                        y={padTop - 4}
-                        width={stepW - 4}
-                        height={chartH + 8}
-                        rx={6}
-                        fill="#F3F4F6"
-                      />
-                    )}
+                    <rect
+                      x={padLeft + idx * stepW + 2}
+                      y={padTop - 4}
+                      width={Math.max(1, stepW - 4)}
+                      height={chartH + 8}
+                      rx={6}
+                      fill={isActive ? '#F3F4F6' : 'transparent'}
+                    />
                     <rect
                       x={centerX - barW * 1.65}
                       y={padTop + chartH - revH}
@@ -198,6 +200,14 @@ export default function FinancialPnlChart({
                     >
                       {item.label}
                     </text>
+                    {/* Invisible edge-to-edge column hit target to eliminate gap flicker between bars */}
+                    <rect
+                      x={padLeft + idx * stepW}
+                      y={0}
+                      width={stepW}
+                      height={svgHeight}
+                      fill="transparent"
+                    />
                   </g>
                 );
               })}
@@ -207,7 +217,7 @@ export default function FinancialPnlChart({
       </div>
 
       {/* Right: OPEX Structure Share */}
-      <div className="admin-card" style={{ marginBottom: 0 }}>
+      <div className="admin-card fin-chart-card">
         <div className="admin-card-header">
           <div className="admin-card-title">Cơ cấu các khoản chi</div>
           <span style={{ fontWeight: 700, fontSize: '13px', color: '#B45309' }} className="tabular-nums">
