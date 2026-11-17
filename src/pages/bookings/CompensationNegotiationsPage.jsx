@@ -257,8 +257,14 @@ export default function CompensationNegotiationsPage() {
 
       {/* Table */}
       <div className="admin-card">
-        <div className="admin-table-wrap">
-          <table className="admin-table">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Danh sách phiếu thương lượng giảm bồi thường"
+          className="table-responsive"
+          style={{ border: 'none' }}
+        >
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Mã phiếu &amp; Đơn</th>
@@ -454,7 +460,7 @@ export default function CompensationNegotiationsPage() {
 
       {selectedNegotiation && (
         <CompensationReviewDialog
-          key={selectedNegotiation.id}
+          key={`${selectedNegotiation.id}-${selectedNegotiation.status}-${selectedNegotiation.updatedAt || ''}`}
           isOpen={Boolean(selectedNegotiation)}
           onClose={closeFocusModal}
           negotiation={selectedNegotiation}

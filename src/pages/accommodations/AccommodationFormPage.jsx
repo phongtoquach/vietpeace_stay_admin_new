@@ -167,8 +167,8 @@ function toApiCreatePayload(formData) {
     // type_id của UI phải đổi thành typeId dạng số cho API.
     typeId: Number(formData.type_id),
 
-    // Trang Create luôn tạo bản nháp; đổi trạng thái do trang Sửa đảm nhận.
-    status: 0,
+    // Cơ sở mới chưa có Manager quản lý mặc định ở trạng thái Ngừng hoạt động (status = 2).
+    status: 2,
     locationId: Number(formData.location_id),
     wardId: formData.ward_id ? Number(formData.ward_id) : null,
 
@@ -372,10 +372,11 @@ export default function AccommodationFormPage() {
           checkin_time: detail.checkInTime || '14:00',
           checkout_time: detail.checkOutTime || '12:00',
           star_rating: detail.starRating ?? '',
-          status: detail.status ?? 0,
-          // R7: backend trả cờ "đã có Manager đang hoạt động" để khóa
-          // lựa chọn trạng thái ACTIVE khi chưa gán Manager.
           hasManager: Boolean(detail.hasManager),
+          status:
+            detail.hasManager || Number(detail.status) !== 1
+              ? (detail.status ?? 2)
+              : 2,
           featured: Boolean(detail.isFeatured),
           cover_image: buildImageUrl(detail.coverImageUrl) || '',
           gallery_images: images
@@ -971,7 +972,7 @@ export default function AccommodationFormPage() {
                     error={errors.star_rating}
                   />
 
-                  {isEdit && (
+                  {isEdit ? (
                     <FormSelect
                       label="Trạng thái hoạt động"
                       name="status"
@@ -979,11 +980,8 @@ export default function AccommodationFormPage() {
                       onChange={handleChange}
                       options={[
                         { value: 0, label: 'Bản nháp' },
-                        // R7: chưa có Manager đang hoạt động thì ẩn hẳn lựa chọn
-                        // ACTIVE thay vì hiện rồi làm mờ. Riêng cơ sở đang là
-                        // ACTIVE (dữ liệu cũ) vẫn giữ để select hiển thị đúng
-                        // trạng thái hiện có.
-                        ...(formData.hasManager || Number(formData.status) === 1
+                        // R7: chỉ cho phép Đang hoạt động khi đã có Manager đang hoạt động.
+                        ...(formData.hasManager
                           ? [{ value: 1, label: 'Đang hoạt động (Mở nhận đặt phòng)' }]
                           : []),
                         { value: 2, label: 'Ngừng hoạt động (Tạm đóng bảo trì)' }
@@ -991,10 +989,30 @@ export default function AccommodationFormPage() {
                       error={errors.status}
                       helperText={
                         !formData.hasManager
-                          ? 'Cơ sở chưa có Manager đang hoạt động: chỉ được chuyển qua lại Bản nháp và Ngừng hoạt động.'
+                          ? 'Cơ sở chưa có Manager đang hoạt động: tạm ẩn khỏi website và chỉ ở trạng thái Ngừng hoạt động hoặc Bản nháp cho tới khi phân công Manager.'
                           : undefined
                       }
                     />
+                  ) : (
+                    <div className="form-group">
+                      <label className="form-label">Trạng thái hoạt động</label>
+                      <div
+                        style={{
+                          padding: '9px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid #FECACA',
+                          backgroundColor: '#FEF2F2',
+                          color: '#B91C1C',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Ngừng hoạt động (Mặc định khi chưa phân công Manager)
+                      </div>
+                      <span className="form-helper" style={{ color: '#6B7280', fontSize: '12px', marginTop: '4px' }}>
+                        Cơ sở mới sẽ tạm ẩn khỏi website cho đến khi Admin phân công Manager quản lý.
+                      </span>
+                    </div>
                   )}
 
                   <div className="form-group" style={{ justifyContent: 'center' }}>

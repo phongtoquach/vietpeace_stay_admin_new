@@ -16,7 +16,8 @@ import {
   withReportPeriod,
 } from '../../components/reports/reportPeriod.js';
 import { reportsApi } from '../../api/reports.js';
-import { Download, CalendarCheck, Clock, TrendingUp } from 'lucide-react';
+import { downloadCsv, downloadExcelWorkbook } from '../../utils/reportExport.js';
+import { Download, FileSpreadsheet, CalendarCheck, Clock, TrendingUp } from 'lucide-react';
 
 const STATUS_META = {
   PENDING: { label: 'Chờ xử lý', color: '#A66A00' },
@@ -26,11 +27,6 @@ const STATUS_META = {
   CANCELLED: { label: 'Đã hủy', color: '#C0392B' },
   FAILED: { label: 'Thất bại', color: '#7F1D1D' },
 };
-
-function csvCell(value) {
-  const text = String(value ?? '');
-  return `"${text.replace(/"/g, '""')}"`;
-}
 
 export default function BookingReportPage() {
   const { currentLoggedInUser } = useAuth();
@@ -126,6 +122,65 @@ export default function BookingReportPage() {
   const propertyDetailQuery = buildReportPeriodQuery(year, month);
   const periodTotals = month !== null ? (data?.monthTotals || totals) : totals;
 
+  const buildExportBaseName = () => (
+    month !== null
+      ? `vietpeace_bao_cao_dat_phong_${year}-${String(month).padStart(2, '0')}`
+      : `vietpeace_bao_cao_dat_phong_${year}`
+  );
+
+  const handleExportExcel = () => {
+    if (!data) return;
+    const periodText = month !== null ? `Tháng ${month}/${year}` : `Cả năm ${year}`;
+    const exportedAtText = new Date().toLocaleString('vi-VN');
+    const propTotals = data.properties.reduce(
+      (acc, p) => ({
+        bookings: acc.bookings + Number(p.bookings || 0),
+        cancelledBookings: acc.cancelledBookings + Number(p.cancelledBookings || 0),
+      }),
+      { name: `TỔNG CỘNG (${data.properties.length} cơ sở)`, bookings: 0, cancelledBookings: 0 },
+    );
+    propTotals.cancelRate = propTotals.bookings > 0
+      ? Number(((propTotals.cancelledBookings / propTotals.bookings) * 100).toFixed(2))
+      : 0;
+
+    downloadExcelWorkbook(`${buildExportBaseName()}.xlsx`, [
+      {
+        name: 'Theo co so',
+        title: 'BÁO CÁO ĐẶT PHÒNG THEO CƠ SỞ',
+        subtitle: `Kỳ báo cáo: ${periodText} · Xuất lúc: ${exportedAtText}`,
+        columns: [
+          { header: 'Cơ sở lưu trú', key: 'name', type: 'text', minWidth: 28 },
+          { header: 'Tổng đơn', key: 'bookings', type: 'integer', minWidth: 14 },
+          { header: 'Đơn hủy', key: 'cancelledBookings', type: 'integer', minWidth: 14 },
+          { header: 'Tỷ lệ hủy (%)', key: 'cancelRate', type: 'percent', minWidth: 15 },
+        ],
+        rows: data.properties,
+        summaryRow: propTotals,
+      },
+      {
+        name: 'Theo thang',
+        title: 'BÁO CÁO ĐẶT PHÒNG THEO THÁNG',
+        subtitle: `Kỳ báo cáo: ${periodText} · Xuất lúc: ${exportedAtText}`,
+        columns: [
+          { header: 'Tháng', value: (entry) => `Tháng ${entry.month}`, type: 'text', align: 'center', minWidth: 16 },
+          { header: 'Số lượng đơn', key: 'bookings', type: 'integer', minWidth: 16 },
+        ],
+        rows: data.monthly,
+      },
+      {
+        name: 'Theo trang thai',
+        title: 'PHÂN BỔ ĐƠN THEO TRẠNG THÁI',
+        subtitle: `Kỳ báo cáo: ${periodText} · Xuất lúc: ${exportedAtText}`,
+        columns: [
+          { header: 'Trạng thái đơn', value: (item) => STATUS_META[item.status]?.label || item.status, type: 'text', minWidth: 22 },
+          { header: 'Số lượng', key: 'count', type: 'integer', minWidth: 14 },
+        ],
+        rows: data.statusDistribution,
+      },
+    ]);
+    showToast(`Đã xuất file Excel (.xlsx) báo cáo đặt phòng ${periodLabel}.`);
+  };
+
   const handleExportCSV = () => {
     if (!data) return;
 
@@ -153,17 +208,8 @@ export default function BookingReportPage() {
         property.cancelRate,
       ]),
     ];
-    const content = rows.map((row) => row.map(csvCell).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = month !== null
-      ? `vietpeace_bao_cao_dat_phong_${year}-${String(month).padStart(2, '0')}.csv`
-      : `vietpeace_bao_cao_dat_phong_${year}.csv`;
-    anchor.click();
-    window.URL.revokeObjectURL(url);
-    showToast(`Đã xuất báo cáo đặt phòng ${month !== null ? `tháng ${month}/${year}` : `năm ${year}`}.`);
+    downloadCsv(`${buildExportBaseName()}.csv`, rows);
+    showToast(`Đã xuất báo cáo CSV đặt phòng ${periodLabel}.`);
   };
 
   return (
@@ -181,11 +227,19 @@ export default function BookingReportPage() {
             <ReportMonthSelect month={month} onChange={handleMonthChange} />
             <button
               type="button"
-              onClick={handleExportCSV}
+              onClick={handleExportExcel}
               className="btn btn-primary"
               disabled={!data || loading}
             >
-              <Download size={14} /> Xuất báo cáo CSV
+              <FileSpreadsheet size={14} /> Xuất Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="btn btn-secondary"
+              disabled={!data || loading}
+            >
+              <Download size={14} /> CSV
             </button>
           </div>
         }

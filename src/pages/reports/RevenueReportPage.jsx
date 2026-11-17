@@ -31,6 +31,7 @@ import FinancialWarningEmailModal from '../../components/reports/FinancialWarnin
 import { financialReportsApi, formatCompactVND } from '../../api/financialReports.js';
 import { lookupsApi } from '../../api/lookups.js';
 import { formatDateVN, formatVND } from '../../data/mockData.js';
+import { downloadCsv, downloadExcelWorkbook } from '../../utils/reportExport.js';
 
 const viCollator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
 
@@ -53,21 +54,6 @@ const PAYMENT_STATUS_META = {
   CANCELLED: { label: 'Đã hủy', bg: '#F3F4F6', color: '#4B5563' },
   FAILED: { label: 'Thất bại', bg: '#FEE2E2', color: '#7F1D1D' },
 };
-
-function csvCell(value) {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
-}
-
-function downloadCsv(filename, rows) {
-  const content = rows.map((row) => row.map(csvCell).join(',')).join('\n');
-  const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.URL.revokeObjectURL(url);
-}
 
 const VALID_TABS = new Set(['pnl', 'bonus', 'tet', 'payments']);
 
@@ -343,91 +329,244 @@ export default function RevenueReportPage() {
     );
   };
 
-  const handleExportCurrentCsv = () => {
+  const buildCurrentExportPayload = () => {
+    const exportedAtText = new Date().toLocaleString('vi-VN');
+
     if (activeTab === 'tet' && bonusPreview?.items) {
-      const rows = [
-        ['QUYẾT TOÁN LƯƠNG THÁNG 13 & THƯỞNG TẾT', bonusPreview.periodLabel],
-        [],
-        [
-          'Cơ sở',
-          'Loại hình',
-          'Manager',
-          'Tháng làm việc Mgr',
-          'LN Sau Thuế',
-          'Xếp loại',
-          'Lương T13 Manager',
-          'Thưởng Tết Manager (40%)',
-          'Số NV',
-          'Quỹ Lương T13 NV',
-          'Quỹ Thưởng Tết NV (60%)',
-          'Khấu trừ Top đã duyệt',
-          'Tổng chi cơ sở',
-          'Trạng thái',
-        ],
-        ...bonusPreview.items.map((r) => [
-          r.accommodation_name,
-          r.accommodation_type_name,
-          r.manager_name || 'Chưa phân công',
-          r.manager_working_months,
-          r.net_profit_after_tax,
-          TIER_META[r.performance_tier]?.label || r.performance_tier,
-          r.manager_13th_salary,
-          r.manager_tet_bonus,
-          r.staff_headcount,
-          r.staff_13th_salary_pool,
-          r.staff_tet_bonus_pool,
-          r.prior_period_top_bonus_deducted,
-          r.total_payout_amount,
-          r.settlement_status,
-        ]),
+      const items = bonusPreview.items;
+      const periodText = bonusPreview.periodLabel || String(year);
+      const totalsRow = items.reduce(
+        (acc, r) => ({
+          net_profit_after_tax: acc.net_profit_after_tax + Number(r.net_profit_after_tax || 0),
+          manager_13th_salary: acc.manager_13th_salary + Number(r.manager_13th_salary || 0),
+          manager_tet_bonus: acc.manager_tet_bonus + Number(r.manager_tet_bonus || 0),
+          staff_headcount: acc.staff_headcount + Number(r.staff_headcount || 0),
+          staff_13th_salary_pool: acc.staff_13th_salary_pool + Number(r.staff_13th_salary_pool || 0),
+          staff_tet_bonus_pool: acc.staff_tet_bonus_pool + Number(r.staff_tet_bonus_pool || 0),
+          prior_period_top_bonus_deducted: acc.prior_period_top_bonus_deducted + Number(r.prior_period_top_bonus_deducted || 0),
+          total_payout_amount: acc.total_payout_amount + Number(r.total_payout_amount || 0),
+        }),
+        {
+          accommodation_name: `TỔNG CỘNG (${items.length} cơ sở)`,
+          accommodation_type_name: '',
+          manager_name: '',
+          manager_working_months: '',
+          net_profit_after_tax: 0,
+          performance_tier: '',
+          manager_13th_salary: 0,
+          manager_tet_bonus: 0,
+          staff_headcount: 0,
+          staff_13th_salary_pool: 0,
+          staff_tet_bonus_pool: 0,
+          prior_period_top_bonus_deducted: 0,
+          total_payout_amount: 0,
+          settlement_status: '',
+        },
+      );
+
+      const columns = [
+        { header: 'Cơ sở lưu trú', key: 'accommodation_name', type: 'text', minWidth: 26 },
+        { header: 'Loại hình', key: 'accommodation_type_name', type: 'text', align: 'center', minWidth: 12 },
+        { header: 'Manager phụ trách', value: (r) => r.manager_name ?? (r === totalsRow ? '' : 'Chưa phân công'), type: 'text', minWidth: 20 },
+        { header: 'Tháng làm việc Mgr', key: 'manager_working_months', type: 'integer', minWidth: 14 },
+        { header: 'LN Sau Thuế (VNĐ)', key: 'net_profit_after_tax', type: 'currency', colorBySign: true, minWidth: 18 },
+        { header: 'Xếp loại', value: (r) => (r === totalsRow ? '' : (TIER_META[r.performance_tier]?.label || r.performance_tier)), type: 'text', align: 'center', minWidth: 16 },
+        { header: 'Lương T13 Manager', key: 'manager_13th_salary', type: 'currency', minWidth: 18 },
+        { header: 'Thưởng Tết Mgr (40%)', key: 'manager_tet_bonus', type: 'currency', minWidth: 18 },
+        { header: 'Số NV', key: 'staff_headcount', type: 'integer', minWidth: 10 },
+        { header: 'Quỹ Lương T13 NV', key: 'staff_13th_salary_pool', type: 'currency', minWidth: 18 },
+        { header: 'Quỹ Thưởng Tết NV (60%)', key: 'staff_tet_bonus_pool', type: 'currency', minWidth: 20 },
+        { header: 'Khấu trừ Top đã duyệt', key: 'prior_period_top_bonus_deducted', type: 'currency', minWidth: 18 },
+        { header: 'Tổng chi cơ sở (VNĐ)', key: 'total_payout_amount', type: 'currency', minWidth: 20 },
+        { header: 'Trạng thái', key: 'settlement_status', type: 'text', align: 'center', minWidth: 14 },
       ];
-      downloadCsv(`vietpeace_quyet_toan_thuong_t13_${year}.csv`, rows);
-      showToast('Đã xuất file CSV Quyết toán Lương T13 & Thưởng Tết.');
-      return;
+
+      return {
+        baseName: `vietpeace_quyet_toan_thuong_t13_${year}`,
+        label: 'Quyết toán Lương T13 & Thưởng Tết',
+        sheets: [
+          {
+            name: 'Luong T13 & Thuong Tet',
+            title: 'QUYẾT TOÁN LƯƠNG THÁNG 13 & THƯỞNG TẾT',
+            subtitle: `Kỳ dữ liệu: ${periodText} · Xuất lúc: ${exportedAtText}`,
+            columns,
+            rows: items,
+            summaryRow: totalsRow,
+          },
+        ],
+        csvRows: [
+          ['QUYẾT TOÁN LƯƠNG THÁNG 13 & THƯỞNG TẾT', periodText],
+          [],
+          columns.map((c) => c.header),
+          ...items.map((r) => columns.map((c) => (typeof c.value === 'function' ? c.value(r) : r[c.key]))),
+        ],
+      };
+    }
+
+    if (activeTab === 'payments' && paymentsData?.items) {
+      const items = paymentsData.items;
+      const periodText = overview?.period?.periodLabel || String(year);
+      const totalsRow = items.reduce(
+        (acc, tx) => ({
+          amount: acc.amount + Number(tx.amount || 0),
+          refunded_amount: acc.refunded_amount + Number(tx.refunded_amount || 0),
+          net_cash_collected: acc.net_cash_collected + Number(tx.net_cash_collected || 0),
+          pre_vat_booking_revenue: acc.pre_vat_booking_revenue + Number(tx.pre_vat_booking_revenue || 0),
+          booking_tax_collected: acc.booking_tax_collected + Number(tx.booking_tax_collected || 0),
+        }),
+        {
+          payment_code: `TỔNG TRANG HIỆN TẠI (${items.length} GD)`,
+          provider_transaction_id: '',
+          booking_code: '',
+          accommodation_name: '',
+          contact_name: '',
+          contact_phone: '',
+          amount: 0,
+          refunded_amount: 0,
+          net_cash_collected: 0,
+          pre_vat_booking_revenue: 0,
+          booking_tax_collected: 0,
+          payment_status: '',
+          paid_at: '',
+        },
+      );
+
+      const columns = [
+        { header: 'Mã giao dịch', key: 'payment_code', type: 'text', minWidth: 20 },
+        { header: 'Mã VNPAY', value: (tx) => (tx === totalsRow ? '' : (tx.provider_transaction_id || 'N/A')), type: 'text', minWidth: 16 },
+        { header: 'Mã đơn', key: 'booking_code', type: 'text', minWidth: 20 },
+        { header: 'Cơ sở lưu trú', key: 'accommodation_name', type: 'text', minWidth: 26 },
+        { header: 'Khách hàng', key: 'contact_name', type: 'text', minWidth: 18 },
+        { header: 'Số điện thoại', key: 'contact_phone', type: 'text', align: 'center', minWidth: 14 },
+        { header: 'Số tiền thu (VNĐ)', key: 'amount', type: 'currency', minWidth: 16 },
+        { header: 'Đã hoàn (VNĐ)', key: 'refunded_amount', type: 'currency', minWidth: 15 },
+        { header: 'Thực thu ròng (VNĐ)', key: 'net_cash_collected', type: 'currency', colorBySign: true, minWidth: 18 },
+        { header: 'Doanh thu Pre-VAT', key: 'pre_vat_booking_revenue', type: 'currency', minWidth: 16 },
+        { header: 'Thuế VAT thu hộ', key: 'booking_tax_collected', type: 'currency', minWidth: 15 },
+        { header: 'Trạng thái', value: (tx) => (tx === totalsRow ? '' : (PAYMENT_STATUS_META[tx.payment_status]?.label || tx.payment_status)), type: 'text', align: 'center', minWidth: 15 },
+        { header: 'Ngày giao dịch', value: (tx) => (tx === totalsRow ? '' : formatDateVN(tx.paid_at || tx.created_at)), type: 'text', align: 'center', minWidth: 15 },
+      ];
+
+      return {
+        baseName: `vietpeace_doi_soat_giao_dich_${year}`,
+        label: 'Đối soát Giao dịch',
+        sheets: [
+          {
+            name: 'Doi soat Giao dich',
+            title: 'BÁO CÁO ĐỐI SOÁT GIAO DỊCH VNPAY / ĐẶT PHÒNG',
+            subtitle: `Kỳ dữ liệu: ${periodText} · Xuất lúc: ${exportedAtText}`,
+            columns,
+            rows: items,
+            summaryRow: totalsRow,
+          },
+        ],
+        csvRows: [
+          ['BÁO CÁO ĐỐI SOÁT GIAO DỊCH', periodText],
+          [],
+          columns.map((c) => c.header),
+          ...items.map((tx) => columns.map((c) => (typeof c.value === 'function' ? c.value(tx) : tx[c.key]))),
+        ],
+      };
     }
 
     if (overview?.properties) {
-      const rows = [
-        ['BÁO CÁO TÀI CHÍNH P&L', overview.period?.periodLabel || year],
-        [],
-        [
-          'Hạng',
-          'Mã cơ sở',
-          'Cơ sở lưu trú',
-          'Loại hình',
-          'Điểm đến',
-          'Manager',
-          'Thu Đặt phòng Pre-VAT',
-          'Thu Phụ trợ & Khác',
-          'Tổng Thu Ròng',
-          'Tổng Chi OPEX',
-          'Thuế TNDN (10%)',
-          'Lợi nhuận Sau Thuế',
-          'Biên LN (%)',
-          'Xếp loại',
-          'Thưởng Top dự kiến',
-        ],
-        ...sortedPnlRows.map((r) => [
-          r.ranking_position || '-',
-          r.accommodation_code,
-          r.accommodation_name,
-          r.accommodation_type_name,
-          r.location_name,
-          r.manager_name || 'Chưa phân công',
-          r.net_booking_revenue_pre_vat,
-          r.extra_facility_revenue,
-          r.total_net_revenue,
-          r.total_expenses,
-          r.tax_amount,
-          r.net_profit_after_tax,
-          r.net_margin_percent,
-          TIER_META[r.performance_tier]?.label || r.performance_tier,
-          r.top_bonus_amount,
-        ]),
+      const periodText = overview.period?.periodLabel || year;
+      const totalsRow = sortedPnlRows.reduce(
+        (acc, r) => ({
+          ...acc,
+          net_booking_revenue_pre_vat: acc.net_booking_revenue_pre_vat + Number(r.net_booking_revenue_pre_vat || 0),
+          extra_facility_revenue: acc.extra_facility_revenue + Number(r.extra_facility_revenue || 0),
+          total_net_revenue: acc.total_net_revenue + Number(r.total_net_revenue || 0),
+          total_expenses: acc.total_expenses + Number(r.total_expenses || 0),
+          tax_amount: acc.tax_amount + Number(r.tax_amount || 0),
+          net_profit_after_tax: acc.net_profit_after_tax + Number(r.net_profit_after_tax || 0),
+          top_bonus_amount: acc.top_bonus_amount + Number(r.top_bonus_amount || 0),
+        }),
+        {
+          ranking_position: '',
+          accommodation_code: '',
+          accommodation_name: `TỔNG CỘNG (${sortedPnlRows.length} cơ sở)`,
+          accommodation_type_name: '',
+          location_name: '',
+          manager_name: '',
+          net_booking_revenue_pre_vat: 0,
+          extra_facility_revenue: 0,
+          total_net_revenue: 0,
+          total_expenses: 0,
+          tax_amount: 0,
+          net_profit_after_tax: 0,
+          net_margin_percent: '',
+          performance_tier: '',
+          top_bonus_amount: 0,
+        },
+      );
+      if (totalsRow.total_net_revenue > 0) {
+        totalsRow.net_margin_percent = Number(
+          ((totalsRow.net_profit_after_tax / totalsRow.total_net_revenue) * 100).toFixed(2),
+        );
+      }
+
+      const columns = [
+        { header: 'Hạng', value: (r) => (r === totalsRow ? '' : (r.ranking_position || '-')), type: 'integer', minWidth: 9 },
+        { header: 'Mã cơ sở', key: 'accommodation_code', type: 'text', align: 'center', minWidth: 14 },
+        { header: 'Cơ sở lưu trú', key: 'accommodation_name', type: 'text', minWidth: 28 },
+        { header: 'Loại hình', key: 'accommodation_type_name', type: 'text', align: 'center', minWidth: 12 },
+        { header: 'Điểm đến', key: 'location_name', type: 'text', align: 'center', minWidth: 14 },
+        { header: 'Manager phụ trách', value: (r) => (r === totalsRow ? '' : (r.manager_name || 'Chưa phân công')), type: 'text', minWidth: 20 },
+        { header: 'Thu Đặt phòng Pre-VAT', key: 'net_booking_revenue_pre_vat', type: 'currency', minWidth: 20 },
+        { header: 'Thu Phụ trợ & Khác', key: 'extra_facility_revenue', type: 'currency', minWidth: 18 },
+        { header: 'Tổng Thu Ròng', key: 'total_net_revenue', type: 'currency', minWidth: 18 },
+        { header: 'Tổng Chi OPEX', key: 'total_expenses', type: 'currency', minWidth: 18 },
+        { header: 'Thuế TNDN (10%)', key: 'tax_amount', type: 'currency', minWidth: 16 },
+        { header: 'Lợi nhuận Sau Thuế', key: 'net_profit_after_tax', type: 'currency', colorBySign: true, minWidth: 20 },
+        { header: 'Biên LN (%)', key: 'net_margin_percent', type: 'percent', minWidth: 13 },
+        { header: 'Xếp loại', value: (r) => (r === totalsRow ? '' : (TIER_META[r.performance_tier]?.label || r.performance_tier)), type: 'text', align: 'center', minWidth: 16 },
+        { header: 'Thưởng Top dự kiến', key: 'top_bonus_amount', type: 'currency', minWidth: 18 },
       ];
-      downloadCsv(`vietpeace_bao_cao_pnl_${year}.csv`, rows);
-      showToast('Đã xuất file CSV Bảng Thu – Chi (P&L).');
+
+      return {
+        baseName: `vietpeace_bao_cao_pnl_${year}`,
+        label: 'Bảng Thu – Chi (P&L)',
+        sheets: [
+          {
+            name: 'Bao cao P&L',
+            title: 'BÁO CÁO TÀI CHÍNH THU – CHI (P&L)',
+            subtitle: `Kỳ dữ liệu: ${periodText} · Xuất lúc: ${exportedAtText}`,
+            columns,
+            rows: sortedPnlRows,
+            summaryRow: totalsRow,
+          },
+        ],
+        csvRows: [
+          ['BÁO CÁO TÀI CHÍNH P&L', periodText],
+          [],
+          columns.map((c) => c.header),
+          ...sortedPnlRows.map((r) => columns.map((c) => (typeof c.value === 'function' ? c.value(r) : r[c.key]))),
+        ],
+      };
     }
+
+    return null;
+  };
+
+  const handleExportCurrentExcel = () => {
+    const payload = buildCurrentExportPayload();
+    if (!payload) {
+      showToast('Chưa có dữ liệu báo cáo ở tab hiện tại để xuất file.', 'info');
+      return;
+    }
+    downloadExcelWorkbook(`${payload.baseName}.xlsx`, payload.sheets);
+    showToast(`Đã xuất file Excel (.xlsx) ${payload.label}.`);
+  };
+
+  const handleExportCurrentCsv = () => {
+    const payload = buildCurrentExportPayload();
+    if (!payload) {
+      showToast('Chưa có dữ liệu báo cáo ở tab hiện tại để xuất file.', 'info');
+      return;
+    }
+    downloadCsv(`${payload.baseName}.csv`, payload.csvRows);
+    showToast(`Đã xuất file CSV ${payload.label}.`);
   };
 
   // Filtered items in Tab 3 supporting search/location/type filters seamlessly
@@ -572,8 +711,17 @@ export default function RevenueReportPage() {
             <button
               type="button"
               className="btn btn-primary"
+              onClick={handleExportCurrentExcel}
+              disabled={loadingOverview || (!overview && !bonusPreview && !paymentsData)}
+            >
+              <FileSpreadsheet size={14} /> Xuất Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
               onClick={handleExportCurrentCsv}
-              disabled={loadingOverview || (!overview && !bonusPreview)}
+              disabled={loadingOverview || (!overview && !bonusPreview && !paymentsData)}
+              title="Xuất định dạng CSV tương thích Excel"
             >
               <Download size={14} /> Xuất CSV
             </button>

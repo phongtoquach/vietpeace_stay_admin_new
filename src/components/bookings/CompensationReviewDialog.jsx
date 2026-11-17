@@ -29,6 +29,8 @@ export default function CompensationReviewDialog({
   showToast,
 }) {
   const dialogRef = useRef(null);
+  const approvedInputRef = useRef(null);
+  const adminNoteRef = useRef(null);
   const [decision, setDecision] = useState('APPROVE');
   const [approvedExtraReduction, setApprovedExtraReduction] = useState(
     negotiation ? String(negotiation.requestedExtraReduction || 0) : '',
@@ -36,6 +38,7 @@ export default function CompensationReviewDialog({
   const [adminDecisionNote, setAdminDecisionNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -63,7 +66,9 @@ export default function CompensationReviewDialog({
 
   const currentPayable = Number(negotiation.previousFinalAmount || 0);
   const requestedReduction = Number(negotiation.requestedExtraReduction || 0);
-  const approvedNum = Math.max(0, Math.round(Number(approvedExtraReduction || 0)));
+  const parsedApproved = approvedExtraReduction === '' ? NaN : Math.round(Number(approvedExtraReduction));
+  const approvedNum = Number.isFinite(parsedApproved) ? Math.max(0, parsedApproved) : 0;
+  const approvedPct = currentPayable > 0 && approvedNum > 0 ? Math.round((approvedNum / currentPayable) * 100) : 0;
   const previewFinalAmount =
     decision === 'REJECT' ? currentPayable : Math.max(0, currentPayable - approvedNum);
 
@@ -72,27 +77,34 @@ export default function CompensationReviewDialog({
     setErrorMsg('');
 
     if (decision === 'APPROVE') {
-      if (!Number.isFinite(approvedNum) || approvedNum <= 0) {
+      if (!Number.isFinite(parsedApproved) || parsedApproved <= 0) {
+        setFieldErrors({ approved: true });
         setErrorMsg('Số tiền Admin xác nhận giảm phải lớn hơn 0 đ. Nếu không đồng ý giảm, hãy chọn Từ chối.');
+        approvedInputRef.current?.focus();
         return;
       }
-      if (approvedNum > currentPayable) {
+      if (parsedApproved > currentPayable) {
+        setFieldErrors({ approved: true });
         setErrorMsg(`Số tiền giảm không được vượt quá mức đang yêu cầu đền (${formatVND(currentPayable)}).`);
+        approvedInputRef.current?.focus();
         return;
       }
     }
 
     const trimmedNote = adminDecisionNote.trim();
     if (trimmedNote.length < 3) {
+      setFieldErrors({ note: true });
       setErrorMsg('Vui lòng nhập ghi chú phản hồi kết quả gửi về cho Manager (tối thiểu 3 ký tự).');
+      adminNoteRef.current?.focus();
       return;
     }
 
+    setFieldErrors({});
     setBusy(true);
     try {
       const res = await reviewCompensationNegotiation(negotiation.id, {
         decision,
-        approvedExtraReduction: decision === 'APPROVE' ? approvedNum : 0,
+        approvedExtraReduction: decision === 'APPROVE' ? parsedApproved : 0,
         adminDecisionNote: trimmedNote,
         versionToken: negotiation.versionToken,
       });
@@ -327,6 +339,7 @@ export default function CompensationReviewDialog({
         {canAdminReview ? (
           <form
             id="admin-review-negotiation-form"
+            noValidate
             onSubmit={handleSubmitReview}
             style={{
               border: '1px solid #CBD5E1',
@@ -401,35 +414,61 @@ export default function CompensationReviewDialog({
 
             {decision === 'APPROVE' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px', alignItems: 'start' }}>
                   <div>
                     <label htmlFor="rev-approved-amount" className="filter-label" style={{ display: 'block', marginBottom: '4px' }}>
                       Số tiền Admin xác nhận giảm thêm (VNĐ) *
                     </label>
                     <input
+                      ref={approvedInputRef}
                       id="rev-approved-amount"
                       name="approvedExtraReduction"
                       type="number"
                       inputMode="numeric"
                       min={1}
                       max={currentPayable}
-                      step={10000}
+                      step={1}
                       required
                       autoFocus
+                      aria-invalid={fieldErrors.approved ? 'true' : undefined}
+                      aria-describedby="rev-approved-amount-hint"
                       className="filter-input tabular-nums"
                       style={{ width: '100%', fontWeight: 700 }}
                       value={approvedExtraReduction}
-                      onChange={(e) => setApprovedExtraReduction(e.target.value)}
+                      onChange={(e) => {
+                        setApprovedExtraReduction(e.target.value);
+                        if (fieldErrors.approved || errorMsg) {
+                          setFieldErrors((prev) => ({ ...prev, approved: false }));
+                          setErrorMsg('');
+                        }
+                      }}
                     />
+                    <div
+                      id="rev-approved-amount-hint"
+                      className="tabular-nums"
+                      style={{
+                        fontSize: '11.5px',
+                        marginTop: '4px',
+                        color: approvedNum > currentPayable ? '#B91C1C' : '#0369A1',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {approvedNum > currentPayable
+                        ? `Vượt quá mức tối đa ${formatVND(currentPayable)}`
+                        : approvedNum > 0
+                          ? `= ${formatVND(approvedNum)} (giảm ~${approvedPct}%)`
+                          : `Tối đa ${formatVND(currentPayable)}`}
+                    </div>
                   </div>
                   <div
                     style={{
-                      padding: '8px 10px',
+                      padding: '10px 12px',
                       borderRadius: '8px',
                       backgroundColor: '#ECFDF5',
                       border: '1px solid #A7F3D0',
                       fontSize: '12.5px',
                       color: '#065F46',
+                      marginTop: '20px',
                     }}
                   >
                     Mức đền chốt sau duyệt:{' '}
@@ -448,7 +487,11 @@ export default function CompensationReviewDialog({
                   <button
                     type="button"
                     className="btn btn-sm btn-secondary"
-                    onClick={() => setApprovedExtraReduction(String(requestedReduction))}
+                    onClick={() => {
+                      setApprovedExtraReduction(String(requestedReduction));
+                      setFieldErrors((prev) => ({ ...prev, approved: false }));
+                      setErrorMsg('');
+                    }}
                   >
                     Đúng mức đề xuất ({formatVND(requestedReduction)})
                   </button>
@@ -456,11 +499,13 @@ export default function CompensationReviewDialog({
                     <button
                       type="button"
                       className="btn btn-sm btn-secondary"
-                      onClick={() =>
+                      onClick={() => {
                         setApprovedExtraReduction(
                           String(Math.max(10000, Math.round((requestedReduction * 0.5) / 10000) * 10000)),
-                        )
-                      }
+                        );
+                        setFieldErrors((prev) => ({ ...prev, approved: false }));
+                        setErrorMsg('');
+                      }}
                     >
                       Giảm 50% đề xuất
                     </button>
@@ -470,16 +515,23 @@ export default function CompensationReviewDialog({
             )}
 
             <div>
-              <label htmlFor="rev-admin-note" className="filter-label" style={{ display: 'block', marginBottom: '4px' }}>
-                Phản hồi của Admin gửi về Manager *
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                <label htmlFor="rev-admin-note" className="filter-label" style={{ margin: 0 }}>
+                  Phản hồi của Admin gửi về Manager *
+                </label>
+                <span className="tabular-nums" style={{ fontSize: '11px', color: '#64748B' }}>
+                  {adminDecisionNote.trim().length}/1000 (tối thiểu 3 ký tự)
+                </span>
+              </div>
               <textarea
+                ref={adminNoteRef}
                 id="rev-admin-note"
                 name="adminDecisionNote"
                 rows={2}
                 required
                 minLength={3}
                 maxLength={1000}
+                aria-invalid={fieldErrors.note ? 'true' : undefined}
                 className="filter-input"
                 style={{ width: '100%', resize: 'vertical' }}
                 placeholder={
@@ -488,7 +540,13 @@ export default function CompensationReviewDialog({
                     : 'VD: Xem ảnh thấy vết nứt nhẹ ở vỏ ngoài, đồng ý hỗ trợ giảm 1.000.000đ cho khách hợp tác.'
                 }
                 value={adminDecisionNote}
-                onChange={(e) => setAdminDecisionNote(e.target.value)}
+                onChange={(e) => {
+                  setAdminDecisionNote(e.target.value);
+                  if (fieldErrors.note || errorMsg) {
+                    setFieldErrors((prev) => ({ ...prev, note: false }));
+                    setErrorMsg('');
+                  }
+                }}
               />
             </div>
           </form>

@@ -172,6 +172,19 @@ export default function BookingDetailPage() {
       ? 'checked-out'
       : booking.status;
 
+  const hasStayFolio = Boolean(
+    booking.status === 'CONFIRMED' && (booking.checked_in_at || booking.checked_out_at),
+  );
+  const settlementSummary = booking.settlement || {};
+  const incidentalTotal = Number(settlementSummary.incidentalGrandTotal || 0);
+  const pendingNegCount = Number(settlementSummary.pendingNegotiationsCount || 0);
+  const scrollToFolio = () => {
+    document.getElementById('checkout-folio-panel')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  };
+
   const checkInIso = toDateOnlyIso(booking.checkin_date);
   const todayIso = getLocalTodayIso();
   const isBeforeCheckInDate = Boolean(checkInIso && checkInIso > todayIso);
@@ -244,15 +257,6 @@ export default function BookingDetailPage() {
                 <LogIn size={14} /> {stayLoading ? 'Đang xử lý...' : 'Xác nhận nhận phòng'}
               </button>
             )}
-            {booking.status === 'CONFIRMED' && booking.checked_in_at && !booking.checked_out_at && canWriteBookings && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => folioRef.current?.openSettle()}
-              >
-                <Receipt size={14} /> Kết toán &amp; Trả phòng
-              </button>
-            )}
             {booking.status === 'CONFIRMED' && booking.checked_out_at && (
               <button
                 type="button"
@@ -269,7 +273,7 @@ export default function BookingDetailPage() {
         }
       />
 
-      {/* Status Summary Banner */}
+      {/* Status & Live Stay Settlement Summary Banner */}
       <div
         className="admin-card"
         style={{
@@ -290,18 +294,42 @@ export default function BookingDetailPage() {
             </span>
           )}
         </div>
+
+        {hasStayFolio && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {pendingNegCount > 0 && (
+              <span className="badge badge-warning">
+                Chờ Admin duyệt giảm giá ({pendingNegCount})
+              </span>
+            )}
+            <span className="tabular-nums" style={{ fontSize: '12.5px', color: '#374151' }}>
+              Phát sinh lưu trú:{' '}
+              <strong style={{ color: incidentalTotal > 0 ? '#B45309' : '#166534' }}>
+                {formatVND(incidentalTotal)}
+              </strong>
+              {settlementSummary.settlementStatus === 'SETTLED'
+                ? ' · Đã tất toán'
+                : settlementSummary.settlementStatus === 'PENDING_PAYMENT'
+                  ? ' · Chờ VNPay'
+                  : ''}
+            </span>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={scrollToFolio}>
+              <Receipt size={13} /> Bảng kê trả phòng ↓
+            </button>
+          </div>
+        )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+      <div className="booking-detail-summary-grid">
         {/* Left Column: Details & Pricing Breakdown */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
           {/* Guest & Property Information */}
           <div className="admin-card">
             <div className="admin-card-header">
               <div className="admin-card-title">Thông tin kỳ lưu trú & Khách hàng</div>
             </div>
             <div className="admin-card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div className="booking-stay-info-grid">
                 {/* Guest Details */}
                 <div>
                   <h3 style={{ fontSize: '13px', fontWeight: 700, color: '#292D32', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -512,24 +540,10 @@ export default function BookingDetailPage() {
               </table>
             </div>
           </div>
-
-          {booking.status === 'CONFIRMED' && (booking.checked_in_at || booking.checked_out_at) && (
-            <CheckoutFolioSection
-              ref={folioRef}
-              bookingId={booking.id}
-              accommodationId={booking.accommodation_id}
-              isAdmin={isAdmin}
-              canWriteBookings={canWriteBookings}
-              initialOpenSettle={initialOpenSettle}
-              initialOpenInvoice={initialOpenInvoice}
-              onSettlementCompleted={reloadDetail}
-              showToast={showToast}
-            />
-          )}
         </div>
 
         {/* Right Column: Lifecycle */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
           <div className="admin-card">
             <div className="admin-card-header">
               <div className="admin-card-title">Mốc thời gian đặt phòng</div>
@@ -560,7 +574,9 @@ export default function BookingDetailPage() {
                 </div>
                 <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
                   {booking.checked_in_at
-                    ? `${formatDateTimeVN(booking.checked_in_at)} · ${booking.checked_in_by_name || 'Không xác định'}`
+                    ? booking.checked_in_by_name
+                      ? `${formatDateTimeVN(booking.checked_in_at)} · ${booking.checked_in_by_name}`
+                      : formatDateTimeVN(booking.checked_in_at)
                     : '—'}
                 </div>
               </div>
@@ -571,7 +587,9 @@ export default function BookingDetailPage() {
                 </div>
                 <div className="tabular-nums" style={{ fontWeight: 600, marginTop: '2px' }}>
                   {booking.checked_out_at
-                    ? `${formatDateTimeVN(booking.checked_out_at)} · ${booking.checked_out_by_name || 'Không xác định'}`
+                    ? booking.checked_out_by_name
+                      ? `${formatDateTimeVN(booking.checked_out_at)} · ${booking.checked_out_by_name}`
+                      : formatDateTimeVN(booking.checked_out_at)
                     : '—'}
                 </div>
               </div>
@@ -593,6 +611,22 @@ export default function BookingDetailPage() {
           </div>
         </div>
       </div>
+
+      {hasStayFolio && (
+        <div style={{ marginTop: '16px' }}>
+          <CheckoutFolioSection
+            ref={folioRef}
+            bookingId={booking.id}
+            accommodationId={booking.accommodation_id}
+            isAdmin={isAdmin}
+            canWriteBookings={canWriteBookings}
+            initialOpenSettle={initialOpenSettle}
+            initialOpenInvoice={initialOpenInvoice}
+            onSettlementCompleted={reloadDetail}
+            showToast={showToast}
+          />
+        </div>
+      )}
     </div>
   );
 }

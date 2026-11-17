@@ -25,6 +25,7 @@ export default function CheckoutSettleDialog({
   showToast,
 }) {
   const dialogRef = useRef(null);
+  const cashInputRef = useRef(null);
   const dueAmount = Number(folio?.summary?.settlementDueAmount || 0);
   const hasDue = dueAmount > 0;
 
@@ -56,7 +57,9 @@ export default function CheckoutSettleDialog({
 
   if (!folio) return null;
 
-  const { booking, summary, vietQr } = folio;
+  const { booking, summary, vietQr, settlementPayments = [] } = folio;
+  const existingPendingVnpay =
+    settlementPayments.find((p) => p.paymentMethod === 'VNPAY' && p.status === 'PENDING') || null;
   const cashReceivedNum = Number(cashReceived || 0);
   const cashChange = paymentMethod === 'CASH' && Number.isFinite(cashReceivedNum)
     ? Math.max(0, Math.round(cashReceivedNum - dueAmount))
@@ -74,6 +77,7 @@ export default function CheckoutSettleDialog({
 
     if (isCashShort) {
       setErrorMsg(`Tiền khách đưa phải lớn hơn hoặc bằng ${formatVND(dueAmount)}.`);
+      cashInputRef.current?.focus();
       return;
     }
 
@@ -143,6 +147,7 @@ export default function CheckoutSettleDialog({
     <dialog
       ref={dialogRef}
       className="admin-native-dialog"
+      closedby="closerequest"
       aria-labelledby="settle-dialog-title"
       onCancel={(e) => {
         if (submitting) {
@@ -172,7 +177,7 @@ export default function CheckoutSettleDialog({
         </button>
       </div>
 
-      <form onSubmit={handleConfirmDirectSettle} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+      <form noValidate onSubmit={handleConfirmDirectSettle} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
         <div className="fin-dialog-body">
           {errorMsg && (
             <div
@@ -364,15 +369,36 @@ export default function CheckoutSettleDialog({
                           Tiền mặt khách đưa (VNĐ)
                         </label>
                         <input
+                          ref={cashInputRef}
                           id="cash-received"
                           type="number"
+                          inputMode="numeric"
                           min={0}
-                          step={1000}
+                          step={1}
+                          aria-invalid={isCashShort ? 'true' : undefined}
+                          aria-describedby="cash-received-hint"
                           className="filter-input tabular-nums"
                           style={{ width: '100%', fontWeight: 700, fontSize: '15px' }}
                           value={cashReceived}
-                          onChange={(e) => setCashReceived(e.target.value)}
+                          onChange={(e) => {
+                            setCashReceived(e.target.value);
+                            if (errorMsg) setErrorMsg('');
+                          }}
                         />
+                        <div
+                          id="cash-received-hint"
+                          className="tabular-nums"
+                          style={{
+                            fontSize: '11.5px',
+                            marginTop: '4px',
+                            color: isCashShort ? '#B91C1C' : '#0369A1',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {isCashShort
+                            ? `Còn thiếu ${formatVND(dueAmount - Math.max(0, Math.round(cashReceivedNum || 0)))} so với số cần thu`
+                            : `= ${formatVND(Math.max(0, Math.round(cashReceivedNum || 0)))}`}
+                        </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
                           <button
                             type="button"
@@ -481,20 +507,72 @@ export default function CheckoutSettleDialog({
                   {paymentMethod === 'VNPAY' && (
                     <div style={{ border: '1px solid #E5E7EB', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {!vnpaySession ? (
-                        <>
-                          <p style={{ margin: 0, fontSize: '12.5px', color: '#4B5563' }}>
-                            Tạo mã QR / liên kết thanh toán VNPay cho số tiền phát sinh <strong>{formatVND(dueAmount)}</strong>.
-                            Khách có thể quét trực tiếp hoặc tự thanh toán từ tài khoản <em>Đặt phòng của tôi</em> trên Website.
-                          </p>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={submitting}
-                            onClick={handleCreateVnpay}
-                          >
-                            <Globe size={14} /> {submitting ? 'Đang khởi tạo...' : 'Tạo QR & Liên kết thanh toán VNPay'}
-                          </button>
-                        </>
+                        existingPendingVnpay ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <div
+                              style={{
+                                padding: '10px 12px',
+                                borderRadius: '8px',
+                                backgroundColor: '#FFFBEB',
+                                border: '1px solid #FDE68A',
+                                fontSize: '12px',
+                                color: '#78350F',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                              }}
+                            >
+                              <div style={{ fontWeight: 700, color: '#92400E' }}>
+                                Đang có giao dịch VNPay chờ khách thanh toán online
+                              </div>
+                              <div>
+                                <strong>Mã lượt thu:</strong> <code>{existingPendingVnpay.settlementCode}</code>
+                              </div>
+                              {existingPendingVnpay.vnpTxnRef && (
+                                <div>
+                                  <strong>Mã tham chiếu VNPay:</strong> <code>{existingPendingVnpay.vnpTxnRef}</code>
+                                </div>
+                              )}
+                              <div>
+                                <strong>Số tiền:</strong>{' '}
+                                <strong className="tabular-nums">{formatVND(existingPendingVnpay.amount)}</strong>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-primary"
+                                disabled={submitting}
+                                onClick={handleCheckVnpayStatus}
+                              >
+                                <RefreshCw size={13} /> Kiểm tra đã thanh toán chưa
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-secondary"
+                                disabled={submitting}
+                                onClick={handleCreateVnpay}
+                              >
+                                <Globe size={13} /> {submitting ? 'Đang khởi tạo...' : 'Tạo mã QR / link VNPay mới'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p style={{ margin: 0, fontSize: '12.5px', color: '#4B5563' }}>
+                              Tạo mã QR / liên kết thanh toán VNPay cho số tiền phát sinh <strong>{formatVND(dueAmount)}</strong>.
+                              Khách có thể quét trực tiếp hoặc tự thanh toán từ tài khoản <em>Đặt phòng của tôi</em> trên Website.
+                            </p>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              disabled={submitting}
+                              onClick={handleCreateVnpay}
+                            >
+                              <Globe size={14} /> {submitting ? 'Đang khởi tạo...' : 'Tạo QR & Liên kết thanh toán VNPay'}
+                            </button>
+                          </>
+                        )
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -552,7 +630,7 @@ export default function CheckoutSettleDialog({
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={submitting || isCashShort}
+              disabled={submitting}
             >
               <CheckCircle2 size={14} />{' '}
               {submitting
